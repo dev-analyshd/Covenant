@@ -24,6 +24,7 @@ export interface CredentialRecord {
   proofBytes: string;
   proofSizeBytes: number;
   circuitConstraints: number;
+  onChain?: boolean;
 }
 
 export interface SettlementRecord {
@@ -40,6 +41,7 @@ export interface SettlementRecord {
   proofBytes: string;
   ledger?: number;
   gasUsed?: number;
+  onChain?: boolean;
 }
 
 export interface AuditLogEntry {

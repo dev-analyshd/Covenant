@@ -10,6 +10,7 @@ import {
 } from "@stellar/stellar-sdk";
 
 export const TESTNET_HORIZON = "https://horizon-testnet.stellar.org";
+export const TESTNET_RPC = "https://soroban-testnet.stellar.org";
 export const NETWORK_PASSPHRASE = Networks.TESTNET;
 
 export const COVENANT_KEYPAIR = Keypair.fromSecret(
@@ -127,9 +128,35 @@ export async function submitTx(tx: any) {
   return server.submitTransaction(tx);
 }
 
-export function formatXLM(stroops: string | number): string {
-  const val = typeof stroops === "string" ? parseFloat(stroops) : stroops;
-  return (val / 10_000_000).toFixed(7);
+// ── Send a real XLM payment (used in settlement demos) ─────────────────────
+export async function sendPayment(params: {
+  toPublic: string;
+  amount: string;
+  memo?: string;
+}): Promise<string> {
+  const account = await server.loadAccount(COVENANT_PUBLIC);
+  const txBuilder = new TransactionBuilder(account, {
+    fee: BASE_FEE,
+    networkPassphrase: NETWORK_PASSPHRASE,
+  }).addOperation(
+    Operation.payment({
+      destination: params.toPublic,
+      asset: Asset.native(),
+      amount: params.amount,
+    })
+  );
+  if (params.memo) {
+    txBuilder.addMemo(Memo.text(params.memo.slice(0, 28)));
+  }
+  const tx = txBuilder.setTimeout(30).build();
+  tx.sign(COVENANT_KEYPAIR);
+  const result = await server.submitTransaction(tx);
+  return (result as any).hash as string;
+}
+
+export function formatXLM(val: string | number): string {
+  const n = typeof val === "string" ? parseFloat(val) : val;
+  return n.toFixed(7);
 }
 
 export function shortKey(key: string): string {
@@ -142,4 +169,8 @@ export function explorerTx(hash: string) {
 
 export function explorerAccount(addr: string) {
   return `https://stellar.expert/explorer/testnet/account/${addr}`;
+}
+
+export function explorerContract(contractId: string) {
+  return `https://stellar.expert/explorer/testnet/contract/${contractId}`;
 }
