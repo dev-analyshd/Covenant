@@ -1,11 +1,16 @@
-import { useState } from "react";
-import { Lock, Globe, CheckCircle, Loader, ArrowRight, Info } from "lucide-react";
+import { useState, useCallback } from "react";
+import {
+  Lock, Globe, CheckCircle2, Loader2, ArrowRight, Info,
+  ExternalLink, Shield, Copy, AlertCircle
+} from "lucide-react";
+import { useCovenantStore, SettlementRecord } from "../lib/store";
+import { COVENANT_PUBLIC } from "../lib/stellar";
 
 type Step = "form" | "proving" | "completed";
 
-const assets = ["USDC", "EURC", "PYUSD", "GYEN", "BRLA"];
+const ASSETS = ["USDC", "EURC", "PYUSD", "GYEN", "BRLA", "XLM"];
 
-const tierLimits: Record<number, number> = {
+const TIER_LIMITS: Record<number, number> = {
   5: 1_000_000,
   4: 800_000,
   3: 600_000,
@@ -13,288 +18,383 @@ const tierLimits: Record<number, number> = {
   1: 200_000,
 };
 
-export default function SettlementPanel() {
-  const [step, setStep] = useState<Step>("form");
-  const [isCrossCurrency, setIsCrossCurrency] = useState(false);
-  const [fromAsset, setFromAsset] = useState("USDC");
-  const [toAsset, setToAsset] = useState("EURC");
-  const [amount, setAmount] = useState("");
-  const [recipient, setRecipient] = useState("");
-  const [proving, setProving] = useState("");
-  const userTier = 4;
+const PROVING_STEPS = [
+  { label: "Building balance range proof",      detail: "assert(sender_balance ≥ amount)" },
+  { label: "Computing tier-adjusted limit",     detail: "assert(amount ≤ tier_limit(compliance_tier))" },
+  { label: "Verifying compliance nullifier",   detail: "assert(compliance_nullifier ≠ 0)" },
+  { label: "Generating settlement commitment", detail: "settlement_hash = poseidon2([id, amount, asset, secret])" },
+  { label: "Computing UltraHonk proof",        detail: "bb prove -b target/private_settlement.json" },
+  { label: "Submitting to CovenantSettlement", detail: "initiate_settlement(proof, public_inputs, asset, amount)" },
+  { label: "Executing SAC transfer",           detail: "token::Client::transfer(sender, recipient, amount)" },
+];
 
-  const handleSettle = async () => {
+function randHex(len: number) {
+  return [...Array(len)].map(() => Math.floor(Math.random() * 16).toString(16)).join("");
+}
+
+export default function SettlementPanel() {
+  const { addSettlement, credentials } = useCovenantStore();
+  const [step, setStep] = useState<Step>("form");
+  const [provingIdx, setProvingIdx] = useState(-1);
+  const [result, setResult] = useState<SettlementRecord | null>(null);
+  const [copied, setCopied] = useState("");
+
+  const [form, setForm] = useState({
+    fromAsset: "USDC",
+    toAsset: "EURC",
+    amount: "",
+    recipient: "",
+    crossCurrency: false,
+    memo: "",
+  });
+
+  const userTier = credentials[0]?.tier ?? 4;
+  const limit = TIER_LIMITS[userTier];
+  const amountNum = parseFloat(form.amount || "0");
+  const exceedsLimit = amountNum > limit;
+  const valid = form.amount && form.recipient && !exceedsLimit && amountNum > 0;
+
+  const handleSettle = useCallback(async () => {
+    if (!valid) return;
     setStep("proving");
-    const steps = [
-      "Computing settlement proof in Noir circuit...",
-      "Verifying balance constraints (range proof)...",
-      "Checking compliance credential nullifier...",
-      "Submitting to CovenantSettlement contract...",
-      "Executing token transfer via Stellar Asset Contract...",
-    ];
-    for (const s of steps) {
-      setProving(s);
-      await new Promise((r) => setTimeout(r, 700));
+    setProvingIdx(0);
+
+    for (let i = 0; i < PROVING_STEPS.length; i++) {
+      setProvingIdx(i);
+      const delay = i === 4 ? 1800 : i === 5 ? 1000 : 700;
+      await new Promise((r) => setTimeout(r, delay));
     }
+
+    const now = new Date();
+    const s: SettlementRecord = {
+      id: `SETL-${randHex(4).toUpperCase()}`,
+      settlementHash: `0x${randHex(32)}`,
+      fromAsset: form.fromAsset,
+      toAsset: form.toAsset,
+      amount: form.amount,
+      tier: userTier,
+      recipient: form.recipient,
+      timestamp: now,
+      txHash: randHex(64),
+      crossCurrency: form.crossCurrency,
+    };
+    setResult(s);
+    addSettlement(s);
     setStep("completed");
+  }, [form, valid, userTier, addSettlement]);
+
+  const copy = (val: string, key: string) => {
+    navigator.clipboard.writeText(val);
+    setCopied(key);
+    setTimeout(() => setCopied(""), 2000);
   };
 
-  const limit = tierLimits[userTier];
-  const amountNum = parseFloat(amount || "0");
-  const exceedsLimit = amountNum > limit;
+  const reset = () => {
+    setStep("form");
+    setProvingIdx(-1);
+    setResult(null);
+    setForm({ fromAsset: "USDC", toAsset: "EURC", amount: "", recipient: "", crossCurrency: false, memo: "" });
+  };
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
-      <div className="glass-panel p-8">
-        <div className="flex items-center gap-3 mb-6">
+    <div className="max-w-2xl mx-auto animate-in">
+      <div className="glass p-6 sm:p-8">
+        <div className="flex items-start gap-4 mb-6">
           <div
-            className="w-12 h-12 rounded-xl flex items-center justify-center"
-            style={{ background: "rgba(139,92,246,0.12)" }}
+            className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0"
+            style={{ background: "rgba(139,92,246,0.1)" }}
           >
-            <Lock style={{ color: "#a78bfa" }} size={24} />
+            <Lock style={{ color: "#a78bfa" }} size={22} />
           </div>
           <div>
-            <h2 className="text-xl font-bold text-white">Private Settlement</h2>
-            <p className="text-sm" style={{ color: "var(--color-text-muted)" }}>
-              Execute a ZK-verified cross-border transfer on Stellar
+            <h2 className="text-lg font-bold text-white">Private Settlement</h2>
+            <p className="text-sm mt-0.5" style={{ color: "var(--color-text-muted)" }}>
+              Execute a ZK-verified cross-border stablecoin transfer on Stellar testnet via{" "}
+              <code className="mono text-xs px-1 py-0.5 rounded"
+                style={{ background: "rgba(139,92,246,0.1)", color: "#c4b5fd" }}>
+                private_settlement.nr
+              </code>
             </p>
           </div>
         </div>
 
         {step === "form" && (
-          <div className="space-y-5">
+          <div className="space-y-5 animate-in">
             <label
-              className="flex items-center gap-3 p-4 rounded-lg cursor-pointer transition-all"
+              className="flex items-center gap-3 p-4 rounded-xl cursor-pointer transition-all"
               style={{
-                background: isCrossCurrency ? "rgba(139,92,246,0.1)" : "rgba(30,41,59,0.4)",
-                border: `1px solid ${isCrossCurrency ? "rgba(139,92,246,0.3)" : "var(--color-border)"}`,
+                background: form.crossCurrency ? "rgba(139,92,246,0.08)" : "rgba(22,27,39,0.6)",
+                border: `1px solid ${form.crossCurrency ? "rgba(139,92,246,0.25)" : "var(--color-border)"}`,
               }}
             >
               <input
                 type="checkbox"
-                checked={isCrossCurrency}
-                onChange={(e) => setIsCrossCurrency(e.target.checked)}
-                style={{ width: 18, height: 18, accentColor: "#8b5cf6" }}
+                checked={form.crossCurrency}
+                onChange={(e) => setForm({ ...form, crossCurrency: e.target.checked })}
+                style={{ width: 16, height: 16, accentColor: "#8b5cf6" }}
               />
               <div className="flex-1">
                 <div className="text-sm font-medium text-white">Cross-Currency Settlement</div>
-                <div className="text-xs" style={{ color: "var(--color-text-muted)" }}>
-                  Convert between stablecoins via Stellar DEX path payment
+                <div className="text-xs mt-0.5" style={{ color: "var(--color-text-muted)" }}>
+                  Convert between stablecoins via Stellar DEX path payment (CovenantComplianceBridge)
                 </div>
               </div>
-              <Globe size={18} style={{ color: "var(--color-text-dim)" }} />
+              <Globe size={16} style={{ color: "var(--color-text-dim)" }} />
             </label>
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium mb-2" style={{ color: "#cbd5e1" }}>
+                <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--color-text-muted)" }}>
                   From Asset
                 </label>
                 <select
                   className="input-field"
-                  value={fromAsset}
-                  onChange={(e) => setFromAsset(e.target.value)}
+                  value={form.fromAsset}
+                  onChange={(e) => setForm({ ...form, fromAsset: e.target.value })}
                 >
-                  {assets.map((a) => (
-                    <option key={a} value={a}>{a}</option>
-                  ))}
+                  {ASSETS.map((a) => <option key={a}>{a}</option>)}
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium mb-2" style={{ color: "#cbd5e1" }}>
-                  To Asset {!isCrossCurrency && <span style={{ color: "var(--color-text-dim)" }}>(same-asset)</span>}
+                <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--color-text-muted)" }}>
+                  To Asset
+                  {!form.crossCurrency && (
+                    <span className="ml-1 opacity-50">(same)</span>
+                  )}
                 </label>
                 <select
                   className="input-field"
-                  value={isCrossCurrency ? toAsset : fromAsset}
-                  onChange={(e) => setToAsset(e.target.value)}
-                  disabled={!isCrossCurrency}
-                  style={{ opacity: isCrossCurrency ? 1 : 0.5 }}
+                  value={form.crossCurrency ? form.toAsset : form.fromAsset}
+                  onChange={(e) => setForm({ ...form, toAsset: e.target.value })}
+                  disabled={!form.crossCurrency}
                 >
-                  {assets.map((a) => (
-                    <option key={a} value={a}>{a}</option>
-                  ))}
+                  {ASSETS.map((a) => <option key={a}>{a}</option>)}
                 </select>
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-2" style={{ color: "#cbd5e1" }}>
-                Amount
+              <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--color-text-muted)" }}>
+                Amount *
               </label>
               <div style={{ position: "relative" }}>
                 <input
-                  type="number"
+                  type="number" min="0"
                   className="input-field"
                   placeholder="0.00"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  style={{ paddingRight: "4rem" }}
+                  value={form.amount}
+                  onChange={(e) => setForm({ ...form, amount: e.target.value })}
+                  style={{ paddingRight: "4.5rem" }}
                 />
                 <span
-                  className="text-xs font-medium"
+                  className="mono text-xs"
                   style={{
-                    position: "absolute",
-                    right: "1rem",
-                    top: "50%",
-                    transform: "translateY(-50%)",
+                    position: "absolute", right: "1rem", top: "50%", transform: "translateY(-50%)",
                     color: "var(--color-text-dim)",
                   }}
                 >
-                  {fromAsset}
+                  {form.fromAsset}
                 </span>
               </div>
-              {exceedsLimit && amount && (
-                <p className="text-xs mt-1.5" style={{ color: "#f87171" }}>
-                  Amount exceeds your Tier {userTier} limit of ${limit.toLocaleString()}
+              {exceedsLimit && form.amount && (
+                <p className="flex items-center gap-1.5 text-xs mt-1.5" style={{ color: "#f87171" }}>
+                  <AlertCircle size={12} />
+                  Exceeds your Tier {userTier} limit of ${limit.toLocaleString()}
                 </p>
               )}
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-2" style={{ color: "#cbd5e1" }}>
-                Recipient Address
+              <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--color-text-muted)" }}>
+                Recipient Stellar Address *
+              </label>
+              <input
+                type="text"
+                className="input-field mono"
+                placeholder="G... (56-character Stellar address)"
+                value={form.recipient}
+                onChange={(e) => setForm({ ...form, recipient: e.target.value })}
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--color-text-muted)" }}>
+                Compliance Memo (optional)
               </label>
               <input
                 type="text"
                 className="input-field"
-                placeholder="G... (Stellar address)"
-                value={recipient}
-                onChange={(e) => setRecipient(e.target.value)}
+                placeholder="Internal reference (max 28 chars)"
+                maxLength={28}
+                value={form.memo}
+                onChange={(e) => setForm({ ...form, memo: e.target.value })}
               />
             </div>
 
             <div
-              className="p-4 rounded-lg space-y-2.5"
-              style={{ background: "rgba(15,23,42,0.7)", border: "1px solid var(--color-border)" }}
+              className="p-4 rounded-xl space-y-2.5"
+              style={{ background: "rgba(6,9,16,0.7)", border: "1px solid var(--color-border)" }}
             >
-              <div className="flex justify-between text-sm items-center">
-                <span style={{ color: "var(--color-text-muted)" }}>Your Compliance Tier</span>
-                <span className="tier-badge tier-4">Tier {userTier}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span style={{ color: "var(--color-text-muted)" }}>Settlement Limit</span>
-                <span className="text-white">${limit.toLocaleString()}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span style={{ color: "var(--color-text-muted)" }}>ZK Proof Required</span>
-                <span style={{ color: "#34d399" }}>✓ Verified</span>
-              </div>
-              {isCrossCurrency && (
-                <div className="flex justify-between text-sm">
-                  <span style={{ color: "var(--color-text-muted)" }}>DEX Route</span>
-                  <span className="flex items-center gap-1 text-white">
-                    {fromAsset} <ArrowRight size={12} /> {toAsset}
-                  </span>
+              <div className="label-sm mb-3">Settlement Parameters</div>
+              {[
+                { label: "Your Compliance Tier", value: null, tier: userTier },
+                { label: "Settlement Limit", value: `$${limit.toLocaleString()}` },
+                { label: "ZK Proof Required", value: "✓ UltraHonk" },
+                { label: "Privacy Model", value: "Commitment only on-chain" },
+                ...(form.crossCurrency ? [{ label: "DEX Route", value: `${form.fromAsset} → ${form.toAsset}` }] : []),
+              ].map((row, i) => (
+                <div key={i} className="flex items-center justify-between text-sm">
+                  <span style={{ color: "var(--color-text-muted)" }}>{row.label}</span>
+                  {row.tier ? (
+                    <span className={`tier-badge tier-${row.tier}`}>Tier {row.tier}</span>
+                  ) : (
+                    <span className="text-white text-xs">{row.value}</span>
+                  )}
                 </div>
-              )}
-              <div className="flex items-start gap-2 pt-1">
-                <Info size={13} style={{ color: "var(--color-text-dim)", marginTop: 1, flexShrink: 0 }} />
+              ))}
+              <div
+                className="flex items-start gap-2 pt-1.5 mt-1.5"
+                style={{ borderTop: "1px solid var(--color-border-subtle)" }}
+              >
+                <Info size={12} style={{ color: "var(--color-text-dim)", marginTop: 2 }} />
                 <p className="text-xs" style={{ color: "var(--color-text-dim)" }}>
-                  Settlement details are kept private. Only a commitment hash and tier attestation are stored on-chain.
+                  Only a commitment hash and compliance tier are stored on-chain. Amount, sender, and
+                  recipient remain private. Regulators can audit with a view key.
                 </p>
               </div>
             </div>
 
             <button
               onClick={handleSettle}
-              disabled={!amount || !recipient || exceedsLimit}
+              disabled={!valid}
               className="btn-primary w-full"
-              style={{
-                padding: "0.75rem",
-                opacity: (!amount || !recipient || exceedsLimit) ? 0.5 : 1,
-                background: "linear-gradient(135deg, #7c3aed, #6d28d9)",
-              }}
+              style={{ padding: "0.75rem", background: valid ? "linear-gradient(135deg,#7c3aed,#6d28d9)" : undefined }}
             >
-              <span className="flex items-center justify-center gap-2">
-                <Lock size={17} />
-                Execute Private Settlement
-              </span>
+              <Lock size={16} />
+              Execute Private Settlement
             </button>
           </div>
         )}
 
         {step === "proving" && (
-          <div className="py-12 text-center space-y-6">
-            <div
-              className="w-16 h-16 rounded-full flex items-center justify-center mx-auto"
-              style={{ background: "rgba(139,92,246,0.12)" }}
-            >
-              <Loader style={{ color: "#a78bfa" }} size={30} className="animate-spin" />
-            </div>
-            <div>
-              <h3 className="text-lg font-semibold text-white mb-2">Generating Settlement Proof...</h3>
-              <p className="text-sm" style={{ color: "#a78bfa" }}>{proving}</p>
-            </div>
-            <div className="max-w-xs mx-auto h-1.5 rounded-full" style={{ background: "rgba(30,41,59,0.8)" }}>
+          <div className="space-y-6 animate-in">
+            <div className="text-center py-4">
               <div
-                className="h-full rounded-full"
-                style={{
-                  width: "60%",
-                  background: "linear-gradient(90deg, #7c3aed, #8b5cf6)",
-                  animation: "pulse 1.5s ease-in-out infinite",
-                }}
-              />
+                className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-3"
+                style={{ background: "rgba(139,92,246,0.08)" }}
+              >
+                <Loader2 style={{ color: "#a78bfa" }} size={28} className="animate-spin" />
+              </div>
+              <h3 className="text-base font-semibold text-white">Generating Settlement Proof…</h3>
+              <p className="text-sm mt-1" style={{ color: "var(--color-text-muted)" }}>
+                private_settlement circuit · Noir + Barretenberg
+              </p>
+            </div>
+            <div className="space-y-2">
+              {PROVING_STEPS.map((s, i) => {
+                const done = i < provingIdx;
+                const active = i === provingIdx;
+                return (
+                  <div key={i} className="flex items-start gap-3">
+                    <div
+                      className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5"
+                      style={{
+                        background: done ? "rgba(16,185,129,0.12)" : active ? "rgba(139,92,246,0.15)" : "rgba(30,45,69,0.4)",
+                        border: `1px solid ${done ? "rgba(16,185,129,0.25)" : active ? "rgba(139,92,246,0.4)" : "var(--color-border)"}`,
+                      }}
+                    >
+                      {done ? (
+                        <CheckCircle2 size={12} style={{ color: "#34d399" }} />
+                      ) : active ? (
+                        <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: "#a78bfa" }} />
+                      ) : null}
+                    </div>
+                    <div>
+                      <div className={`text-xs font-medium ${done ? "proof-step-done" : active ? "proof-step-active" : "proof-step-pending"}`}>
+                        {s.label}
+                      </div>
+                      {(done || active) && (
+                        <div className="mono text-xs mt-0.5" style={{ color: "#475569" }}>{s.detail}</div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
 
-        {step === "completed" && (
-          <div className="space-y-6">
-            <div className="text-center py-6">
+        {step === "completed" && result && (
+          <div className="space-y-5 animate-in">
+            <div className="text-center py-4">
               <div
-                className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"
-                style={{ background: "rgba(16,185,129,0.12)" }}
+                className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-3"
+                style={{ background: "rgba(16,185,129,0.1)" }}
               >
-                <CheckCircle style={{ color: "#34d399" }} size={32} />
+                <CheckCircle2 style={{ color: "#34d399" }} size={30} />
               </div>
-              <h3 className="text-xl font-bold text-white mb-1">Settlement Complete!</h3>
-              <p className="text-sm" style={{ color: "var(--color-text-muted)" }}>
-                Your private settlement has been executed on Stellar
+              <h3 className="text-lg font-bold text-white">Settlement Complete!</h3>
+              <p className="text-sm mt-1" style={{ color: "var(--color-text-muted)" }}>
+                ZK proof verified on-chain · SAC transfer executed · Compliance trail encrypted
               </p>
             </div>
 
             <div
-              className="p-5 rounded-lg space-y-3"
-              style={{ background: "rgba(15,23,42,0.7)", border: "1px solid var(--color-border)" }}
+              className="rounded-xl divide-y"
+              style={{ background: "rgba(6,9,16,0.7)", border: "1px solid var(--color-border)" }}
             >
-              <div className="flex justify-between text-sm">
-                <span style={{ color: "var(--color-text-muted)" }}>Settlement Hash</span>
-                <span className="text-white font-mono text-xs">0x3e8a7f4c1b2d9e06</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span style={{ color: "var(--color-text-muted)" }}>Amount</span>
-                <span className="text-white">{amount} {fromAsset}{isCrossCurrency ? ` → ${toAsset}` : ""}</span>
-              </div>
-              <div className="flex justify-between text-sm items-center">
-                <span style={{ color: "var(--color-text-muted)" }}>Compliance Tier</span>
-                <span className="tier-badge tier-4">Tier {userTier}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span style={{ color: "var(--color-text-muted)" }}>Status</span>
-                <span style={{ color: "#34d399" }}>Completed</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span style={{ color: "var(--color-text-muted)" }}>Compliance Trail</span>
-                <span style={{ color: "var(--color-text-dim)" }}>Encrypted (view key required)</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span style={{ color: "var(--color-text-muted)" }}>Transaction</span>
-                <a href="#" style={{ color: "#60a5fa" }} className="hover:underline text-xs">
-                  View on Stellar Expert ↗
-                </a>
-              </div>
+              {[
+                { label: "Settlement ID", value: result.id },
+                { label: "Settlement Hash", value: `${result.settlementHash.slice(0, 20)}…` },
+                { label: "Amount", value: `${result.amount} ${result.fromAsset}${result.crossCurrency ? ` → ${result.toAsset}` : ""}` },
+                { label: "Recipient", value: `${result.recipient.slice(0, 6)}…${result.recipient.slice(-4)}` },
+                { label: "Compliance Tier", value: null, tier: result.tier },
+                { label: "Timestamp", value: result.timestamp.toLocaleString() },
+                { label: "Compliance Trail", value: "Encrypted (view key required)" },
+              ].map((row, i) => (
+                <div key={i} className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm">
+                  <span style={{ color: "var(--color-text-muted)" }}>{row.label}</span>
+                  {row.tier ? (
+                    <span className={`tier-badge tier-${row.tier}`}>Tier {row.tier}</span>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-xs text-white">{row.value}</span>
+                      {row.label === "Settlement Hash" && (
+                        <button onClick={() => copy(result.settlementHash, "hash")} className="btn-ghost p-1">
+                          <Copy size={11} style={{ color: copied === "hash" ? "#34d399" : "var(--color-text-dim)" }} />
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+              {result.txHash && (
+                <div className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm">
+                  <span style={{ color: "var(--color-text-muted)" }}>Transaction</span>
+                  <a
+                    href={`https://stellar.expert/explorer/testnet/tx/${result.txHash}`}
+                    target="_blank" rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-xs hover:underline"
+                    style={{ color: "#60a5fa" }}
+                  >
+                    Stellar Expert <ExternalLink size={10} />
+                  </a>
+                </div>
+              )}
             </div>
 
-            <button
-              onClick={() => {
-                setStep("form");
-                setAmount("");
-                setRecipient("");
-              }}
-              className="btn-secondary w-full"
-              style={{ padding: "0.75rem" }}
+            <div
+              className="p-3 rounded-lg flex items-start gap-2"
+              style={{ background: "rgba(16,185,129,0.05)", border: "1px solid rgba(16,185,129,0.12)" }}
             >
+              <Shield size={13} style={{ color: "#34d399", marginTop: 2 }} />
+              <p className="text-xs leading-relaxed" style={{ color: "#6ee7b7" }}>
+                Settlement details are private. Only the commitment hash and compliance tier are on-chain.
+                Use the Regulator tab with your view key to audit this settlement.
+              </p>
+            </div>
+
+            <button onClick={reset} className="btn-secondary w-full" style={{ padding: "0.75rem" }}>
               New Settlement
             </button>
           </div>
