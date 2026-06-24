@@ -1,0 +1,7 @@
+[package]
+name = "private_settlement"
+type = "bin"
+authors = ["Covenant Team"]
+compiler_version = ">=1.0.0"
+
+[dependencies]
