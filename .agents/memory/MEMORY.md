@@ -1,2 +1,3 @@
 - [Covenant project state](covenant-state.md) — Stellar Hacks hackathon ZK compliance app; all circuits, contracts, frontend complete with live testnet data.
 - [React warning investigation](react-warning.md) — "Functions not valid as React child" warning persists in Replit preview regardless of code changes; appears to be from Replit's proxy/dev infrastructure, not app code.
+- [Covenant workflow startup](covenant-workflow.md) — workflow command must include PORT and BASE_PATH env vars inline: `PORT=21115 BASE_PATH=/ pnpm --filter @workspace/covenant run dev`

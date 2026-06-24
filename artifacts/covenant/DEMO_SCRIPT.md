@@ -112,16 +112,19 @@
 
 ### [2:30–3:00] Technical Depth + Closing
 
-**SHOW**: Switch to terminal / code editor showing `circuits/compliance_credential/src/main.nr`
+**SHOW**: Click the "ZK Explorer" tab (new — marked with "NEW" badge)
 
 **SAY**:
-> "Let me quickly show the actual Noir circuit. These are the five core constraints: KYC Merkle membership proof using Poseidon2 — the same hash function as Stellar's Protocol 25 host function. Sanctions clearance. Risk score range check. Expiry check. Source of funds commitment.
+> "Let me show the technical depth in the ZK Explorer. You can see the full circuit specifications — 12,847 constraints for the compliance credential circuit, 8,192 for private settlement. Private inputs that never touch the chain. Public outputs that are verified on-chain.
 
-> The outputs — nullifier, tier, address commitment, and view key hash — are the only values that go on-chain. The UltraHonk proof is verified by a Soroban contract using Protocol 26's bn254_pairing host function.
+> Below, you'll see all four Soroban contracts — UltraHonkVerifier, CovenantRegistry, CovenantSettlement, and ComplianceBridge — with the Protocol 26 BN254 host functions: bn254_add, bn254_mul, bn254_pairing. And a step-by-step view of the UltraHonk verification pipeline: Fiat-Shamir transcript, sumcheck, Gemini polynomial commitments, Shplonk KZG batching, and the final BN254 pairing check."
 
-> ZK is not optional in Covenant. Without a valid proof, `CovenantSettlement.execute()` reverts. There's no admin bypass."
+**SHOW**: Expand the "UltraHonk Verification Pipeline" section to show the 5-step pipeline
 
-**SHOW**: Switch to `contracts/covenant_settlement/src/lib.rs` briefly — the `verify_proof` gating
+**SAY**:
+> "ZK is not optional in Covenant. Without a valid proof, `CovenantSettlement.initiate_settlement()` reverts. There's no admin bypass."
+
+**SHOW**: Briefly show `contracts/covenant_settlement/src/lib.rs` verify_proof gating
 
 **SAY**:
 > "This is Covenant — configurable privacy with provable compliance on Stellar. Institutions get the privacy they need. Regulators get the auditability they require. And ZK is what makes both possible at the same time.

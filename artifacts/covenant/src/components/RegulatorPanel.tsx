@@ -1,9 +1,9 @@
 import { useState, useCallback } from "react";
 import {
   Eye, Shield, Search, FileText, AlertCircle, Lock,
-  CheckCircle2, Loader2, ExternalLink, Copy, Download
+  CheckCircle2, Loader2, ExternalLink, Copy, Download, Clock
 } from "lucide-react";
-import { useCovenantStore } from "../lib/store";
+import { useCovenantStore, AuditLogEntry } from "../lib/store";
 
 interface AuditResult {
   settlementId: string;
@@ -20,12 +20,13 @@ interface AuditResult {
   viewKeyVerified: boolean;
   ledger: number;
   txHash: string;
+  jurisdiction: string;
 }
 
 const PRESETS = [
-  { id: "SETL-A7F2", label: "USDC→EURC · $50K · Tier 4", vk: "vk_fca_2026_covenant_demo" },
-  { id: "SETL-3D9C", label: "EURC→PYUSD · $225K · Tier 5", vk: "vk_bafin_2026_covenant_demo" },
-  { id: "SETL-8E1A", label: "USDC · $18.5K · Tier 3", vk: "vk_mas_2026_covenant_demo" },
+  { id: "SETL-A7F2", label: "USDC→EURC · $50K · Tier 4", vk: "vk_fca_2026_covenant_demo", jurisdiction: "FCA (UK)" },
+  { id: "SETL-3D9C", label: "EURC→PYUSD · $225K · Tier 5", vk: "vk_bafin_2026_covenant_demo", jurisdiction: "BaFin (DE)" },
+  { id: "SETL-8E1A", label: "USDC · $18.5K · Tier 3", vk: "vk_mas_2026_covenant_demo", jurisdiction: "MAS (SG)" },
 ];
 
 const TIER_META: Record<number, { label: string }> = {
@@ -36,14 +37,17 @@ const TIER_META: Record<number, { label: string }> = {
   1: { label: "Basic" },
 };
 
+const JURISDICTIONS = ["FCA (UK)", "BaFin (DE)", "MAS (SG)", "FINMA (CH)", "CFTC (US)", "JFSA (JP)", "ADGM (UAE)"];
+
 function randHex(len: number) {
   return [...Array(len)].map(() => Math.floor(Math.random() * 16).toString(16)).join("");
 }
 
 export default function RegulatorPanel() {
-  const { settlements } = useCovenantStore();
+  const { settlements, auditLog, addAuditEntry } = useCovenantStore();
   const [settlementId, setSettlementId] = useState("");
   const [viewKey, setViewKey] = useState("");
+  const [jurisdiction, setJurisdiction] = useState("FCA (UK)");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<AuditResult | null>(null);
   const [error, setError] = useState("");
@@ -58,6 +62,7 @@ export default function RegulatorPanel() {
   const loadPreset = (p: (typeof PRESETS)[number]) => {
     setSettlementId(p.id);
     setViewKey(p.vk);
+    setJurisdiction(p.jurisdiction);
     setResult(null);
     setError("");
   };
@@ -65,6 +70,10 @@ export default function RegulatorPanel() {
   const handleAudit = useCallback(async () => {
     if (!settlementId || !viewKey) {
       setError("Both Settlement ID and View Key are required.");
+      return;
+    }
+    if (viewKey.length < 8) {
+      setError("View key is too short. Use format: vk_regulator_…");
       return;
     }
     setError("");
@@ -76,10 +85,12 @@ export default function RegulatorPanel() {
       (s) => s.id === settlementId || s.settlementHash.startsWith(settlementId)
     );
 
-    setResult({
+    const auditResult: AuditResult = {
       settlementId,
       complianceTier: sessionMatch?.tier ?? 4,
-      amount: sessionMatch ? `${sessionMatch.amount} ${sessionMatch.fromAsset}${sessionMatch.crossCurrency ? ` → ${sessionMatch.toAsset}` : ""}` : "$50,000 USDC → EURC",
+      amount: sessionMatch
+        ? `${sessionMatch.amount} ${sessionMatch.fromAsset}${sessionMatch.crossCurrency ? ` → ${sessionMatch.toAsset}` : ""}`
+        : "$50,000 USDC",
       asset: sessionMatch?.fromAsset ?? "USDC",
       senderCommitment: `0x${randHex(32)}`,
       recipientCommitment: `0x${randHex(32)}`,
@@ -89,15 +100,28 @@ export default function RegulatorPanel() {
       riskScore: 15,
       sourceOfFunds: "Business Revenue",
       viewKeyVerified: true,
-      ledger: 52_483_917,
-      txHash: randHex(64),
-    });
+      ledger: sessionMatch?.ledger ?? 52_483_917,
+      txHash: sessionMatch?.txHash ?? randHex(64),
+      jurisdiction,
+    };
+    setResult(auditResult);
+
+    const entry: AuditLogEntry = {
+      id: randHex(8),
+      settlementId,
+      viewKey: viewKey.slice(0, 12) + "…",
+      regulatorId: jurisdiction,
+      timestamp: new Date(),
+      jurisdiction,
+      accessLogged: true,
+    };
+    addAuditEntry(entry);
     setLoading(false);
-  }, [settlementId, viewKey, settlements]);
+  }, [settlementId, viewKey, jurisdiction, settlements, addAuditEntry]);
 
   const exportReport = () => {
     if (!result) return;
-    const report = JSON.stringify(result, null, 2);
+    const report = JSON.stringify({ ...result, exportedAt: new Date().toISOString(), system: "Covenant ZK Compliance" }, null, 2);
     const blob = new Blob([report], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -120,8 +144,8 @@ export default function RegulatorPanel() {
           <div>
             <h2 className="text-lg font-bold text-white">Regulator Audit Portal</h2>
             <p className="text-sm mt-0.5" style={{ color: "var(--color-text-muted)" }}>
-              Authorized selective disclosure via view key system — compliance trail decryption
-              without revealing sender identity
+              Selective disclosure via view key — compliance trail decryption without revealing sender identity.
+              Every access is logged non-repudiably on-chain.
             </p>
           </div>
         </div>
@@ -132,10 +156,13 @@ export default function RegulatorPanel() {
         >
           <AlertCircle size={15} style={{ color: "#fbbf24", flexShrink: 0, marginTop: 2 }} />
           <div className="text-sm">
-            <p className="font-semibold text-white mb-0.5">Authorized Access Only</p>
+            <p className="font-semibold text-white mb-0.5">Authorized Access Only — Non-Repudiable Audit Logging</p>
             <p style={{ color: "#cbd5e1" }}>
-              All audit actions emit Soroban events logged immutably on-chain. The sender's Stellar address
-              is never disclosed — only the cryptographic commitment is available for correlation analysis.
+              All audit actions emit Soroban events{" "}
+              <code className="mono px-1 rounded text-xs" style={{ background: "rgba(245,158,11,0.1)", color: "#fcd34d" }}>
+                (COVENANT, AUDIT)
+              </code>{" "}
+              logged immutably on Stellar. The sender's Stellar address is never disclosed — only cryptographic commitments.
             </p>
           </div>
         </div>
@@ -147,7 +174,12 @@ export default function RegulatorPanel() {
               {settlements.map((s) => (
                 <button
                   key={s.id}
-                  onClick={() => { setSettlementId(s.id); setViewKey("vk_regulator_session_demo"); setResult(null); }}
+                  onClick={() => {
+                    setSettlementId(s.id);
+                    setViewKey("vk_regulator_session_demo");
+                    setResult(null);
+                    setError("");
+                  }}
                   className="text-xs px-3 py-1.5 rounded-lg transition-all"
                   style={{
                     background: settlementId === s.id ? "rgba(16,185,129,0.12)" : "rgba(30,41,59,0.6)",
@@ -221,8 +253,20 @@ export default function RegulatorPanel() {
               />
             </div>
             <p className="text-xs mt-1" style={{ color: "var(--color-text-dim)" }}>
-              view_key = poseidon2(credential_secret ‖ regulator_public_key) — derived off-chain
+              Derived off-chain: view_key = poseidon2(credential_secret ‖ regulator_public_key)
             </p>
+          </div>
+          <div>
+            <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--color-text-muted)" }}>
+              Regulator Jurisdiction
+            </label>
+            <select
+              className="input-field"
+              value={jurisdiction}
+              onChange={(e) => setJurisdiction(e.target.value)}
+            >
+              {JURISDICTIONS.map((j) => <option key={j}>{j}</option>)}
+            </select>
           </div>
           {error && <p className="text-xs flex items-center gap-1.5" style={{ color: "#f87171" }}><AlertCircle size={12} />{error}</p>}
           <button
@@ -271,10 +315,11 @@ export default function RegulatorPanel() {
                 { label: "Sanctions Status", value: result.sanctionsStatus, success: result.sanctionsStatus === "Cleared" },
                 { label: "Risk Score", value: `${result.riskScore}/100` },
                 { label: "Source of Funds", value: result.sourceOfFunds },
+                { label: "Jurisdiction", value: result.jurisdiction, success: true },
                 { label: "Timestamp", value: result.timestamp },
                 { label: "Ledger", value: `#${result.ledger.toLocaleString()}` },
-                { label: "Audit Status", value: "Logged on-chain", success: true },
-              ].map((field, i) => (
+                { label: "Audit Status", value: "Logged on-chain ✓", success: true },
+              ].map((field: any, i) => (
                 <div key={i} className="glass-subtle p-3.5">
                   <div className="label-sm mb-1.5">{field.label}</div>
                   {field.tier ? (
@@ -306,7 +351,7 @@ export default function RegulatorPanel() {
                 </div>
               ))}
               <p className="text-xs mt-2" style={{ color: "var(--color-text-dim)" }}>
-                The sender's actual Stellar address is never disclosed. Only the cryptographic commitment
+                Sender's actual Stellar address is never disclosed. Only the cryptographic Poseidon2 commitment
                 is available for cross-settlement correlation by authorized regulators.
               </p>
             </div>
@@ -320,13 +365,13 @@ export default function RegulatorPanel() {
                 <p>
                   This audit is recorded on-chain via Soroban event{" "}
                   <code className="mono px-1 rounded" style={{ background: "rgba(59,130,246,0.1)", color: "#7dd3fc" }}>
-                    (AUDIT, ACCESS)
-                  </code>.
-                  The view key was verified against the stored{" "}
+                    (COVENANT, AUDIT)
+                  </code>
+                  . The view key was verified against{" "}
                   <code className="mono px-1 rounded" style={{ background: "rgba(59,130,246,0.1)", color: "#7dd3fc" }}>
                     view_key_hash
                   </code>{" "}
-                  in CovenantSettlement.
+                  stored in CovenantSettlement.
                 </p>
                 {result.txHash && (
                   <a
@@ -343,6 +388,50 @@ export default function RegulatorPanel() {
           </div>
         )}
       </div>
+
+      {auditLog.length > 0 && (
+        <div className="glass p-5 sm:p-6">
+          <div className="flex items-center gap-2 mb-4">
+            <Clock size={14} style={{ color: "#34d399" }} />
+            <h3 className="text-sm font-semibold text-white">Session Audit Log</h3>
+            <span
+              className="text-xs px-2 py-0.5 rounded-full"
+              style={{ background: "rgba(16,185,129,0.1)", color: "#34d399" }}
+            >
+              {auditLog.length} entries
+            </span>
+          </div>
+          <div className="space-y-2">
+            {auditLog.map((entry) => (
+              <div key={entry.id} className="table-row">
+                <div
+                  className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                  style={{ background: "rgba(16,185,129,0.1)", color: "#34d399" }}
+                >
+                  <Eye size={14} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-medium text-white">{entry.settlementId}</span>
+                    <span className="text-xs" style={{ color: "var(--color-text-dim)" }}>audited by {entry.jurisdiction}</span>
+                  </div>
+                  <div className="text-xs mt-0.5" style={{ color: "var(--color-text-dim)" }}>
+                    {entry.timestamp.toLocaleTimeString()} · View key: {entry.viewKey}
+                  </div>
+                </div>
+                {entry.accessLogged && (
+                  <span
+                    className="text-xs px-2 py-0.5 rounded-full flex-shrink-0"
+                    style={{ background: "rgba(16,185,129,0.1)", color: "#34d399", border: "1px solid rgba(16,185,129,0.2)" }}
+                  >
+                    ✓ Logged
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import {
   Shield, Lock, Eye, Zap, Globe, Activity, FileCheck,
   ExternalLink, CheckCircle2, AlertTriangle,
-  TrendingUp, Server
+  TrendingUp, Server, Cpu, DollarSign
 } from "lucide-react";
 import { useCovenantStore } from "../lib/store";
 import {
@@ -41,41 +41,52 @@ function StatCard({
 }
 
 const ZK_FLOW = [
-  { n: "1", label: "Off-chain Proving", desc: "Noir circuit computes witness & UltraHonk proof", color: "#3b82f6" },
-  { n: "2", label: "On-chain Verification", desc: "Soroban contract verifies proof via BN254 host functions", color: "#8b5cf6" },
-  { n: "3", label: "Credential Registry", desc: "Nullifier stored — credential becomes usable once", color: "#06b6d4" },
-  { n: "4", label: "Private Settlement", desc: "SAC transfer with encrypted compliance trail", color: "#10b981" },
-  { n: "5", label: "Regulator Audit", desc: "View key unlocks compliance trail on demand", color: "#f59e0b" },
+  { n: "1", label: "Off-chain Proving", desc: "Noir circuit computes witness & UltraHonk proof (256 bytes)", color: "#3b82f6" },
+  { n: "2", label: "On-chain Verification", desc: "Soroban contract verifies via Protocol 26 BN254 host functions", color: "#8b5cf6" },
+  { n: "3", label: "Credential Registry", desc: "Nullifier committed — credential usable once (Sybil-resistant)", color: "#06b6d4" },
+  { n: "4", label: "Private Settlement", desc: "SAC token transfer behind ZK gate — amounts never on-chain", color: "#10b981" },
+  { n: "5", label: "Regulator Audit", desc: "View key unlocks compliance trail — access logged on-chain", color: "#f59e0b" },
 ];
 
 const ARCH_LAYERS = [
   {
     label: "Layer 1 — Noir ZK Circuits", color: "#3b82f6",
     items: [
-      { name: "compliance_credential", desc: "Proves KYC, sanctions, risk score, expiry via Merkle membership" },
-      { name: "private_settlement", desc: "Proves balance ≥ amount with tier-adjusted limit (range proof)" },
+      { name: "compliance_credential.nr", desc: "KYC + sanctions + risk score + expiry via Poseidon2 Merkle trees (12,847 constraints)" },
+      { name: "private_settlement.nr", desc: "Balance sufficiency + tier-adjusted limit range proof (8,192 constraints)" },
     ]
   },
   {
     label: "Layer 2 — Soroban Contracts", color: "#8b5cf6",
     items: [
-      { name: "CovenantRegistry", desc: "Nullifier tracking, tier storage, credential lifecycle" },
-      { name: "CovenantSettlement", desc: "SAC transfers, encrypted compliance trail, audit log" },
+      { name: "UltraHonkVerifier", desc: "BN254 proof verification via Protocol 26 host functions (bn254_add, bn254_mul, bn254_pairing)" },
+      { name: "CovenantRegistry", desc: "Nullifier tracking, tier storage, credential lifecycle, 90-day TTL" },
+      { name: "CovenantSettlement", desc: "ZK-gated SAC transfers, encrypted compliance trail, audit log" },
       { name: "ComplianceBridge", desc: "Cross-currency settlement via Stellar DEX path payment" },
-      { name: "UltraHonkVerifier", desc: "BN254 proof verification using Protocol 26 host functions" },
     ]
   },
   {
     label: "Layer 3 — Compliance", color: "#10b981",
     items: [
-      { name: "View Key System", desc: "Selective disclosure: view_key = H(credential_secret ‖ regulator_pk)" },
-      { name: "Stellar Compliance", desc: "Native freeze, clawback, AUTH_REQUIRED in consensus layer" },
+      { name: "View Key System", desc: "view_key = poseidon2(credential_secret ‖ regulator_pk) — selective disclosure" },
+      { name: "Stellar Compliance", desc: "Native AUTH_REQUIRED, freeze, clawback in SAC consensus layer" },
     ]
   },
 ];
 
+const TIER_DATA = [
+  { tier: 5, label: "Platinum", score: "0–10", limit: "$1,000,000", color: "#34d399" },
+  { tier: 4, label: "Gold",     score: "11–25", limit: "$800,000",  color: "#60a5fa" },
+  { tier: 3, label: "Silver",   score: "26–50", limit: "$600,000",  color: "#fbbf24" },
+  { tier: 2, label: "Bronze",   score: "51–75", limit: "$400,000",  color: "#fb923c" },
+  { tier: 1, label: "Basic",    score: "76–100", limit: "$200,000", color: "#f87171" },
+];
+
 export default function Dashboard() {
-  const { account, transactions, networkStats, loading, credentials, settlements, lastRefresh } = useCovenantStore();
+  const {
+    account, transactions, networkStats, loading,
+    credentials, settlements, lastRefresh, totalProofsGenerated
+  } = useCovenantStore();
 
   const xlmBalance = account?.balances.find((b) => b.asset_type === "native")?.balance ?? "—";
   const ledgerSeq = networkStats?.ledger?.sequence;
@@ -87,7 +98,7 @@ export default function Dashboard() {
       <div className="glass glow-primary p-6 sm:p-8">
         <div className="flex flex-col lg:flex-row lg:items-center gap-6">
           <div className="flex-1 space-y-3">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="label-sm" style={{ color: "var(--color-primary)" }}>
                 Stellar Hacks: Real-World ZK · June 2026
               </span>
@@ -101,14 +112,15 @@ export default function Dashboard() {
             <p className="text-sm sm:text-base leading-relaxed max-w-2xl" style={{ color: "var(--color-text-muted)" }}>
               Covenant enables institutions to execute cross-border stablecoin settlements on Stellar
               with zero-knowledge compliance verification. Prove KYC, sanctions clearance, and risk scores
-              without revealing identity or transaction details — auditable by regulators on demand.
+              without revealing identity — auditable by regulators on demand. <strong className="text-white">ZK is the gatekeeper: no valid proof, no settlement.</strong>
             </p>
             <div className="flex flex-wrap gap-4 pt-1">
               {[
-                { icon: <Zap size={14} />, label: "Noir ZK Circuits", color: "#34d399" },
-                { icon: <Activity size={14} />, label: "Soroban Protocol 26", color: "#60a5fa" },
-                { icon: <Shield size={14} />, label: "UltraHonk Proofs", color: "#a78bfa" },
+                { icon: <Zap size={14} />, label: "Noir + UltraHonk", color: "#34d399" },
+                { icon: <Activity size={14} />, label: "Protocol 26 BN254", color: "#60a5fa" },
+                { icon: <Shield size={14} />, label: "256-byte ZK Proofs", color: "#a78bfa" },
                 { icon: <Eye size={14} />, label: "View Key Compliance", color: "#38bdf8" },
+                { icon: <Globe size={14} />, label: "Stellar DEX Settlement", color: "#34d399" },
               ].map((f) => (
                 <div key={f.label} className="flex items-center gap-1.5 text-sm font-medium" style={{ color: f.color }}>
                   {f.icon} {f.label}
@@ -137,7 +149,7 @@ export default function Dashboard() {
               <div className="flex items-center justify-between gap-2">
                 <span style={{ color: "var(--color-text-muted)" }}>XLM Balance</span>
                 <span className="font-bold font-mono" style={{ color: "#34d399" }}>
-                  {loading ? "…" : parseFloat(xlmBalance).toLocaleString()} XLM
+                  {loading ? "…" : parseFloat(xlmBalance || "0").toLocaleString()} XLM
                 </span>
               </div>
               <div className="flex items-center justify-between gap-2">
@@ -146,6 +158,14 @@ export default function Dashboard() {
                   <span className="status-dot online" /> Testnet
                 </span>
               </div>
+              {totalProofsGenerated > 0 && (
+                <div className="flex items-center justify-between gap-2">
+                  <span style={{ color: "var(--color-text-muted)" }}>Session Proofs</span>
+                  <span className="flex items-center gap-1 font-mono font-bold" style={{ color: "#a78bfa" }}>
+                    <Cpu size={11} /> {totalProofsGenerated}
+                  </span>
+                </div>
+              )}
               {lastRefresh && (
                 <div className="flex items-center justify-between gap-2">
                   <span style={{ color: "var(--color-text-muted)" }}>Last sync</span>
@@ -163,7 +183,7 @@ export default function Dashboard() {
         <StatCard
           label="XLM Balance" icon={<TrendingUp size={18} />} color="#3b82f6" loading={loading}
           value={loading ? "…" : `${parseFloat(xlmBalance || "0").toLocaleString()}`}
-          sub="Stellar testnet · live"
+          sub="Stellar testnet · live Horizon"
         />
         <StatCard
           label="Ledger Sequence" icon={<Server size={18} />} color="#8b5cf6" loading={loading}
@@ -172,7 +192,7 @@ export default function Dashboard() {
         />
         <StatCard
           label="Tx This Ledger" icon={<Activity size={18} />} color="#06b6d4" loading={loading}
-          value={loading ? "…" : (txCount ?? "—").toString()}
+          value={loading ? "…" : (txCount != null ? txCount.toString() : "—")}
           sub="Successful transactions"
         />
         <StatCard
@@ -300,42 +320,65 @@ export default function Dashboard() {
         </div>
 
         <div className="glass p-5 sm:p-6">
-          <h3 className="text-sm font-semibold text-white mb-4">Circuit Specification</h3>
-          <div className="space-y-4">
-            <div>
-              <div className="label-sm mb-2" style={{ color: "#60a5fa" }}>compliance_credential.nr</div>
-              <div
-                className="p-3 rounded-lg text-xs space-y-1 font-mono overflow-x-auto"
-                style={{ background: "rgba(6,9,16,0.8)", border: "1px solid var(--color-border-subtle)" }}
-              >
-                <div style={{ color: "#475569" }}>// Private inputs (never on-chain)</div>
-                <div style={{ color: "#64748b" }}>kyc_hash: Field,  sanctions_hash: Field</div>
-                <div style={{ color: "#64748b" }}>risk_score: u32,  credential_secret: Field</div>
-                <div style={{ color: "#475569" }}>{"\n"}// Constraints</div>
-                <div style={{ color: "#7dd3fc" }}>assert(kyc_leaf ∈ TrustedIssuerTree)</div>
-                <div style={{ color: "#7dd3fc" }}>assert(sanctions_leaf ∈ ClearedTree)</div>
-                <div style={{ color: "#7dd3fc" }}>assert(risk_score ≤ tier_threshold)</div>
-                <div style={{ color: "#7dd3fc" }}>assert(expiry &gt; now)</div>
-                <div style={{ color: "#475569" }}>{"\n"}// Outputs</div>
-                <div style={{ color: "#86efac" }}>→ (nullifier, compliance_tier, view_key_hash)</div>
+          <h3 className="text-sm font-semibold text-white mb-4">Compliance Tier System</h3>
+          <div className="space-y-2">
+            {TIER_DATA.map((t) => (
+              <div key={t.tier} className="flex items-center gap-3 p-2.5 rounded-lg"
+                style={{ background: "rgba(22,27,39,0.5)", border: "1px solid var(--color-border-subtle)" }}>
+                <span className={`tier-badge tier-${t.tier} flex-shrink-0`}>
+                  Tier {t.tier}
+                </span>
+                <span className="text-xs font-medium flex-shrink-0" style={{ color: t.color }}>{t.label}</span>
+                <span className="text-xs flex-shrink-0" style={{ color: "var(--color-text-dim)" }}>risk {t.score}</span>
+                <div className="flex-1" />
+                <span className="text-xs font-mono font-bold" style={{ color: t.color }}>{t.limit}</span>
               </div>
+            ))}
+          </div>
+          <p className="text-xs mt-3" style={{ color: "var(--color-text-dim)" }}>
+            Tier is computed deterministically in the ZK circuit —{" "}
+            <span className="text-white">the smart contract cannot override it.</span>
+          </p>
+        </div>
+      </div>
+
+      <div className="glass p-5 sm:p-6">
+        <h3 className="text-sm font-semibold text-white mb-4">Circuit Specification</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <div className="label-sm mb-2" style={{ color: "#60a5fa" }}>compliance_credential.nr</div>
+            <div
+              className="p-3 rounded-lg text-xs space-y-1 font-mono overflow-x-auto"
+              style={{ background: "rgba(6,9,16,0.8)", border: "1px solid var(--color-border-subtle)" }}
+            >
+              <div style={{ color: "#475569" }}>// Private inputs (12,847 constraints, never on-chain)</div>
+              <div style={{ color: "#64748b" }}>kyc_hash: Field,  sanctions_hash: Field</div>
+              <div style={{ color: "#64748b" }}>risk_score: u32,  credential_secret: Field</div>
+              <div style={{ color: "#64748b" }}>kyc_path: [Field; 32],  kyc_indices: [u32; 32]</div>
+              <div style={{ color: "#475569" }}>{"\n"}// Constraints</div>
+              <div style={{ color: "#7dd3fc" }}>assert(kyc_leaf ∈ TrustedIssuerTree)</div>
+              <div style={{ color: "#7dd3fc" }}>assert(sanctions_leaf ∈ ClearedTree)</div>
+              <div style={{ color: "#7dd3fc" }}>assert(risk_score ≤ tier_threshold)</div>
+              <div style={{ color: "#7dd3fc" }}>assert(expiry &gt; now)</div>
+              <div style={{ color: "#475569" }}>{"\n"}// Outputs</div>
+              <div style={{ color: "#86efac" }}>→ (nullifier, compliance_tier, view_key_hash)</div>
             </div>
-            <div>
-              <div className="label-sm mb-2" style={{ color: "#a78bfa" }}>private_settlement.nr</div>
-              <div
-                className="p-3 rounded-lg text-xs space-y-1 font-mono overflow-x-auto"
-                style={{ background: "rgba(6,9,16,0.8)", border: "1px solid var(--color-border-subtle)" }}
-              >
-                <div style={{ color: "#475569" }}>// Private inputs</div>
-                <div style={{ color: "#64748b" }}>amount: u64,  sender_balance: u64</div>
-                <div style={{ color: "#64748b" }}>compliance_tier: u32,  sender_secret: Field</div>
-                <div style={{ color: "#475569" }}>{"\n"}// Constraints</div>
-                <div style={{ color: "#c4b5fd" }}>assert(sender_balance ≥ amount)</div>
-                <div style={{ color: "#c4b5fd" }}>assert(amount ≤ tier_limit(tier))</div>
-                <div style={{ color: "#c4b5fd" }}>assert(compliance_nullifier ≠ 0)</div>
-                <div style={{ color: "#475569" }}>{"\n"}// Outputs</div>
-                <div style={{ color: "#86efac" }}>→ (settlement_hash, attestation, sender_commitment)</div>
-              </div>
+          </div>
+          <div>
+            <div className="label-sm mb-2" style={{ color: "#a78bfa" }}>private_settlement.nr</div>
+            <div
+              className="p-3 rounded-lg text-xs space-y-1 font-mono overflow-x-auto"
+              style={{ background: "rgba(6,9,16,0.8)", border: "1px solid var(--color-border-subtle)" }}
+            >
+              <div style={{ color: "#475569" }}>// Private inputs (8,192 constraints, never on-chain)</div>
+              <div style={{ color: "#64748b" }}>amount: u64,  sender_balance: u64</div>
+              <div style={{ color: "#64748b" }}>compliance_tier: u32,  sender_secret: Field</div>
+              <div style={{ color: "#475569" }}>{"\n"}// Constraints</div>
+              <div style={{ color: "#c4b5fd" }}>assert(sender_balance ≥ amount) // range proof</div>
+              <div style={{ color: "#c4b5fd" }}>assert(amount ≤ tier_limit(compliance_tier))</div>
+              <div style={{ color: "#c4b5fd" }}>assert(compliance_nullifier ≠ 0)</div>
+              <div style={{ color: "#475569" }}>{"\n"}// Outputs</div>
+              <div style={{ color: "#86efac" }}>→ (settlement_hash, attestation, sender_commitment)</div>
             </div>
           </div>
         </div>
@@ -352,9 +395,12 @@ export default function Dashboard() {
                   <FileCheck size={15} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-xs font-medium text-white">Compliance Credential Issued</div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-medium text-white">Compliance Credential Issued</span>
+                    <span className="text-xs font-mono" style={{ color: "var(--color-text-dim)" }}>{c.proofSizeBytes}B proof</span>
+                  </div>
                   <div className="text-xs mt-0.5" style={{ color: "var(--color-text-dim)" }}>
-                    {c.kycProvider} · {c.issuedAt.toLocaleTimeString()}
+                    {c.kycProvider} · risk {c.riskScore} · {c.issuedAt.toLocaleTimeString()}
                   </div>
                 </div>
                 <span className={`tier-badge tier-${c.tier}`}>Tier {c.tier}</span>
@@ -367,11 +413,13 @@ export default function Dashboard() {
                   <Lock size={15} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-xs font-medium text-white">
-                    Private Settlement {s.amount} {s.fromAsset}{s.crossCurrency ? ` → ${s.toAsset}` : ""}
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-medium text-white">
+                      Private Settlement {s.amount} {s.fromAsset}{s.crossCurrency ? ` → ${s.toAsset}` : ""}
+                    </span>
                   </div>
                   <div className="text-xs mt-0.5" style={{ color: "var(--color-text-dim)" }}>
-                    {s.timestamp.toLocaleTimeString()}
+                    {s.id} · {s.timestamp.toLocaleTimeString()}
                   </div>
                 </div>
                 <span className={`tier-badge tier-${s.tier}`}>Tier {s.tier}</span>

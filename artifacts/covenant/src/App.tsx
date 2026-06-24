@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   Shield, Activity, FileCheck, Zap, Eye, Globe, RefreshCw,
-  ExternalLink, AlertCircle
+  ExternalLink, AlertCircle, Cpu
 } from "lucide-react";
 import { useCovenantStore } from "./lib/store";
 import { COVENANT_PUBLIC, shortKey, explorerAccount } from "./lib/stellar";
@@ -9,26 +9,34 @@ import Dashboard from "./components/Dashboard";
 import CredentialPanel from "./components/CredentialPanel";
 import SettlementPanel from "./components/SettlementPanel";
 import RegulatorPanel from "./components/RegulatorPanel";
+import ZKExplorer from "./components/ZKExplorer";
 
-type Tab = "dashboard" | "credential" | "settlement" | "regulator";
+type Tab = "dashboard" | "credential" | "settlement" | "regulator" | "zkexplorer";
 
 const TAB_DEFS: { id: Tab; label: string; desc: string }[] = [
-  { id: "dashboard",  label: "Dashboard",  desc: "Live testnet overview" },
-  { id: "credential", label: "Credential", desc: "ZK compliance proof" },
-  { id: "settlement", label: "Settlement", desc: "Private transfer" },
-  { id: "regulator",  label: "Regulator",  desc: "Audit portal" },
+  { id: "dashboard",   label: "Dashboard",   desc: "Live testnet overview" },
+  { id: "credential",  label: "Credential",  desc: "ZK compliance proof" },
+  { id: "settlement",  label: "Settlement",  desc: "Private transfer" },
+  { id: "regulator",   label: "Regulator",   desc: "Audit portal" },
+  { id: "zkexplorer",  label: "ZK Explorer", desc: "Technical deep dive" },
 ];
 
 function tabIcon(id: Tab) {
-  if (id === "dashboard")  return <Activity size={15} />;
-  if (id === "credential") return <FileCheck size={15} />;
-  if (id === "settlement") return <Zap size={15} />;
-  return <Eye size={15} />;
+  if (id === "dashboard")   return <Activity size={15} />;
+  if (id === "credential")  return <FileCheck size={15} />;
+  if (id === "settlement")  return <Zap size={15} />;
+  if (id === "regulator")   return <Eye size={15} />;
+  return <Cpu size={15} />;
 }
 
 export default function App() {
   const [tab, setTab] = useState<Tab>("dashboard");
-  const { walletConnected, setWalletConnected, refresh, loading, lastRefresh, error } = useCovenantStore();
+  const {
+    walletConnected, setWalletConnected, refresh, loading,
+    lastRefresh, error, totalProofsGenerated
+  } = useCovenantStore();
+
+  const [timeSince, setTimeSince] = useState<string>("");
 
   useEffect(() => {
     refresh();
@@ -36,9 +44,19 @@ export default function App() {
     return () => clearInterval(id);
   }, []);
 
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (lastRefresh) {
+        const secs = Math.round((Date.now() - lastRefresh.getTime()) / 1000);
+        setTimeSince(`${secs}s ago`);
+      }
+    }, 1000);
+    return () => clearInterval(id);
+  }, [lastRefresh]);
+
   const handleConnect = useCallback(() => {
     setWalletConnected(!walletConnected);
-  }, [walletConnected]);
+  }, [walletConnected, setWalletConnected]);
 
   return (
     <div className="min-h-screen flex flex-col" style={{ background: "var(--color-bg)" }}>
@@ -67,6 +85,14 @@ export default function App() {
                 >
                   v1.0 · Testnet
                 </span>
+                {totalProofsGenerated > 0 && (
+                  <span
+                    className="text-xs px-2 py-0.5 rounded-full hidden sm:inline-flex items-center gap-1"
+                    style={{ background: "rgba(139,92,246,0.1)", color: "#a78bfa", border: "1px solid rgba(139,92,246,0.2)" }}
+                  >
+                    <Cpu size={10} /> {totalProofsGenerated} proof{totalProofsGenerated !== 1 ? "s" : ""}
+                  </span>
+                )}
               </div>
               <p className="text-xs hidden sm:block" style={{ color: "var(--color-text-dim)" }}>
                 ZK Compliance Credentials on Stellar
@@ -92,7 +118,7 @@ export default function App() {
               >
                 <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
                 <span className="hidden lg:inline">
-                  {loading ? "Syncing…" : `${Math.round((Date.now() - lastRefresh.getTime()) / 1000)}s ago`}
+                  {loading ? "Syncing…" : timeSince}
                 </span>
               </button>
             )}
@@ -144,6 +170,14 @@ export default function App() {
             >
               {tabIcon(t.id)}
               <span>{t.label}</span>
+              {t.id === "zkexplorer" && (
+                <span
+                  className="text-xs px-1 py-0.5 rounded"
+                  style={{ background: "rgba(59,130,246,0.15)", color: "#60a5fa", fontSize: "0.6rem" }}
+                >
+                  NEW
+                </span>
+              )}
             </button>
           ))}
           <div className="ml-auto hidden lg:flex items-center gap-2 pr-2">
@@ -161,10 +195,11 @@ export default function App() {
       </nav>
 
       <main className="flex-1 max-w-screen-2xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
-        {tab === "dashboard" && <Dashboard />}
+        {tab === "dashboard"  && <Dashboard />}
         {tab === "credential" && <CredentialPanel />}
         {tab === "settlement" && <SettlementPanel />}
-        {tab === "regulator" && <RegulatorPanel />}
+        {tab === "regulator"  && <RegulatorPanel />}
+        {tab === "zkexplorer" && <ZKExplorer />}
       </main>
 
       <footer
@@ -176,20 +211,24 @@ export default function App() {
             <div className="flex items-center gap-3">
               <Shield size={14} style={{ color: "var(--color-text-dim)" }} />
               <span className="text-xs" style={{ color: "var(--color-text-dim)" }}>
-                Covenant — Stellar Hacks: Real-World ZK · June 2026
+                Covenant — Stellar Hacks: Real-World ZK · June 2026 · MIT License
               </span>
             </div>
             <div className="flex items-center gap-4 text-xs" style={{ color: "var(--color-text-faint)" }}>
-              <span>Noir + UltraHonk Circuits</span>
+              <span>Noir 1.0-beta.9</span>
+              <span>·</span>
+              <span>Barretenberg 0.87.0</span>
               <span>·</span>
               <span>Soroban Protocol 26</span>
               <span>·</span>
               <a
-                href="https://github.com"
+                href="https://github.com/yugocabrio/rs-soroban-ultrahonk"
+                target="_blank"
+                rel="noopener noreferrer"
                 className="hover:underline"
                 style={{ color: "var(--color-text-dim)" }}
               >
-                MIT License
+                rs-soroban-ultrahonk
               </a>
             </div>
           </div>

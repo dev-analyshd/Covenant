@@ -10,25 +10,6 @@ import {
   fetchOperations,
 } from "./stellar";
 
-interface CovenantState {
-  account: StellarAccount | null;
-  transactions: StellarTransaction[];
-  operations: any[];
-  networkStats: NetworkStats | null;
-  loading: boolean;
-  error: string | null;
-  lastRefresh: Date | null;
-  walletConnected: boolean;
-
-  credentials: CredentialRecord[];
-  settlements: SettlementRecord[];
-
-  setWalletConnected: (v: boolean) => void;
-  refresh: () => Promise<void>;
-  addCredential: (c: CredentialRecord) => void;
-  addSettlement: (s: SettlementRecord) => void;
-}
-
 export interface CredentialRecord {
   id: string;
   nullifier: string;
@@ -40,6 +21,9 @@ export interface CredentialRecord {
   kycProvider: string;
   riskScore: number;
   txHash?: string;
+  proofBytes: string;
+  proofSizeBytes: number;
+  circuitConstraints: number;
 }
 
 export interface SettlementRecord {
@@ -53,6 +37,43 @@ export interface SettlementRecord {
   timestamp: Date;
   txHash?: string;
   crossCurrency: boolean;
+  proofBytes: string;
+  ledger?: number;
+  gasUsed?: number;
+}
+
+export interface AuditLogEntry {
+  id: string;
+  settlementId: string;
+  viewKey: string;
+  regulatorId: string;
+  timestamp: Date;
+  jurisdiction: string;
+  accessLogged: boolean;
+}
+
+interface CovenantState {
+  account: StellarAccount | null;
+  transactions: StellarTransaction[];
+  operations: any[];
+  networkStats: NetworkStats | null;
+  loading: boolean;
+  error: string | null;
+  lastRefresh: Date | null;
+  walletConnected: boolean;
+
+  credentials: CredentialRecord[];
+  settlements: SettlementRecord[];
+  auditLog: AuditLogEntry[];
+
+  totalProofsGenerated: number;
+  totalProofBytes: number;
+
+  setWalletConnected: (v: boolean) => void;
+  refresh: () => Promise<void>;
+  addCredential: (c: CredentialRecord) => void;
+  addSettlement: (s: SettlementRecord) => void;
+  addAuditEntry: (a: AuditLogEntry) => void;
 }
 
 export const useCovenantStore = create<CovenantState>((set, get) => ({
@@ -66,6 +87,9 @@ export const useCovenantStore = create<CovenantState>((set, get) => ({
   walletConnected: false,
   credentials: [],
   settlements: [],
+  auditLog: [],
+  totalProofsGenerated: 0,
+  totalProofBytes: 0,
 
   setWalletConnected: (v) => set({ walletConnected: v }),
 
@@ -92,8 +116,19 @@ export const useCovenantStore = create<CovenantState>((set, get) => ({
   },
 
   addCredential: (c) =>
-    set((s) => ({ credentials: [c, ...s.credentials] })),
+    set((s) => ({
+      credentials: [c, ...s.credentials],
+      totalProofsGenerated: s.totalProofsGenerated + 1,
+      totalProofBytes: s.totalProofBytes + c.proofSizeBytes,
+    })),
 
   addSettlement: (s) =>
-    set((st) => ({ settlements: [s, ...st.settlements] })),
+    set((st) => ({
+      settlements: [s, ...st.settlements],
+      totalProofsGenerated: st.totalProofsGenerated + 1,
+      totalProofBytes: st.totalProofBytes + 256,
+    })),
+
+  addAuditEntry: (a) =>
+    set((s) => ({ auditLog: [a, ...s.auditLog] })),
 }));
