@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import {
-  Shield, Activity, FileCheck, Zap, Eye, Globe, Loader, RefreshCw,
-  ExternalLink, AlertCircle, ChevronRight
+  Shield, Activity, FileCheck, Zap, Eye, Globe, RefreshCw,
+  ExternalLink, AlertCircle
 } from "lucide-react";
 import { useCovenantStore } from "./lib/store";
 import { COVENANT_PUBLIC, shortKey, explorerAccount } from "./lib/stellar";
@@ -12,12 +12,19 @@ import RegulatorPanel from "./components/RegulatorPanel";
 
 type Tab = "dashboard" | "credential" | "settlement" | "regulator";
 
-const TABS: { id: Tab; label: string; icon: React.ReactNode; desc: string }[] = [
-  { id: "dashboard", label: "Dashboard", icon: <Activity size={15} />, desc: "Live testnet overview" },
-  { id: "credential", label: "Credential", icon: <FileCheck size={15} />, desc: "ZK compliance proof" },
-  { id: "settlement", label: "Settlement", icon: <Zap size={15} />, desc: "Private transfer" },
-  { id: "regulator", label: "Regulator", icon: <Eye size={15} />, desc: "Audit portal" },
+const TAB_DEFS: { id: Tab; label: string; desc: string }[] = [
+  { id: "dashboard",  label: "Dashboard",  desc: "Live testnet overview" },
+  { id: "credential", label: "Credential", desc: "ZK compliance proof" },
+  { id: "settlement", label: "Settlement", desc: "Private transfer" },
+  { id: "regulator",  label: "Regulator",  desc: "Audit portal" },
 ];
+
+function tabIcon(id: Tab) {
+  if (id === "dashboard")  return <Activity size={15} />;
+  if (id === "credential") return <FileCheck size={15} />;
+  if (id === "settlement") return <Zap size={15} />;
+  return <Eye size={15} />;
+}
 
 export default function App() {
   const [tab, setTab] = useState<Tab>("dashboard");
@@ -124,7 +131,7 @@ export default function App() {
 
       <nav style={{ borderBottom: "1px solid var(--color-border)", background: "rgba(13,17,23,0.7)" }}>
         <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center overflow-x-auto scrollbar-thin">
-          {TABS.map((t) => (
+          {TAB_DEFS.map((t) => (
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
@@ -135,7 +142,7 @@ export default function App() {
                 background: tab === t.id ? "rgba(59,130,246,0.04)" : "transparent",
               }}
             >
-              {t.icon}
+              {tabIcon(t.id)}
               <span>{t.label}</span>
             </button>
           ))}

@@ -1,0 +1,94 @@
+# ============================================================================
+# Covenant — compliance_credential Circuit: Prolog.toml
+# ============================================================================
+# This file provides example private witness inputs for 'nargo execute'.
+#
+# USAGE:
+#   nargo execute witness      # generate the witness
+#   bb prove -b target/compliance_credential.json -w target/witness.gz -o proof.bin
+#   bb verify -k vk.bin -p proof.bin
+#
+# IMPORTANT: The trusted_issuer_root and negative_screening_root below are
+# pre-computed Poseidon2 Merkle roots for the all-zero sibling path with the
+# given kyc_hash and sanctions_hash. In production, these roots come from the
+# KYC issuer's on-chain Merkle tree, updated after each new credential batch.
+#
+# To compute the correct roots for your inputs, run:
+#   nargo test   # which computes poseidon2_merkle_root internally
+# And adjust the roots to match your computed leaf + path + indices.
+#
+# See docs/CIRCUITS.md for full specification.
+# ============================================================================
+
+# ── Private inputs ─────────────────────────────────────────────────────────
+# kyc_hash: Poseidon2 hash of KYC verification document (from issuer)
+kyc_hash = "123456789"
+
+# sanctions_hash: Poseidon2 hash of sanctions screening clearance
+sanctions_hash = "987654321"
+
+# source_commitment: Non-zero commitment to source-of-funds documentation
+source_commitment = "555555555"
+
+# risk_score: Internal risk assessment (0-100). Score of 15 → Tier 4 (Gold)
+risk_score = "15"
+
+# credential_secret: User's unique random secret (256-bit, generated client-side)
+credential_secret = "111111111"
+
+# kyc_path: Merkle sibling path (32 siblings). All zeros = test/demo mode.
+# In production: real path from KYC issuer's Merkle tree
+kyc_path = [
+    "0", "0", "0", "0", "0", "0", "0", "0",
+    "0", "0", "0", "0", "0", "0", "0", "0",
+    "0", "0", "0", "0", "0", "0", "0", "0",
+    "0", "0", "0", "0", "0", "0", "0", "0"
+]
+
+# kyc_indices: Direction bits (0=current on left, 1=current on right)
+kyc_indices = [
+    "0", "0", "0", "0", "0", "0", "0", "0",
+    "0", "0", "0", "0", "0", "0", "0", "0",
+    "0", "0", "0", "0", "0", "0", "0", "0",
+    "0", "0", "0", "0", "0", "0", "0", "0"
+]
+
+# sanctions_path: Merkle sibling path for sanctions tree
+sanctions_path = [
+    "0", "0", "0", "0", "0", "0", "0", "0",
+    "0", "0", "0", "0", "0", "0", "0", "0",
+    "0", "0", "0", "0", "0", "0", "0", "0",
+    "0", "0", "0", "0", "0", "0", "0", "0"
+]
+
+# sanctions_indices: Direction bits for sanctions tree path
+sanctions_indices = [
+    "0", "0", "0", "0", "0", "0", "0", "0",
+    "0", "0", "0", "0", "0", "0", "0", "0",
+    "0", "0", "0", "0", "0", "0", "0", "0",
+    "0", "0", "0", "0", "0", "0", "0", "0"
+]
+
+# ── Public inputs ────────────────────────────────────────────────────────────
+# trusted_issuer_root: The Merkle root that corresponds to the kyc_path above.
+# This must be computed from your actual KYC issuer Merkle tree.
+# For demo/testnet with all-zero path: use the computed root from nargo test.
+# Production value: obtained from the issuer's on-chain Merkle tree update.
+trusted_issuer_root = "8512462166162793494548556911069729688866505817988476427706099413951249791028"
+
+# negative_screening_root: Merkle root of the sanctions-cleared entity set.
+# Updated by compliance providers after each screening cycle.
+negative_screening_root = "8512462166162793494548556911069729688866505817988476427706099413951249791028"
+
+# current_timestamp: Stellar ledger close timestamp (Unix, seconds)
+# Run: curl https://horizon-testnet.stellar.org/ledgers?order=desc&limit=1
+# and get the .closed_at field
+current_timestamp = "1750000000"
+
+# expiry_timestamp: Credential expiry (90 days from issuance)
+# current_timestamp + 90 * 24 * 60 * 60 = current_timestamp + 7776000
+expiry_timestamp = "1757776000"
+
+# tier_threshold: Maximum risk score for the requested tier
+# Tier 4 (Gold) = 25, Tier 3 (Silver) = 50, Tier 5 (Platinum) = 10
+tier_threshold = "25"

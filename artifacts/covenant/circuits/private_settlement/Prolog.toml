@@ -1,0 +1,57 @@
+# ============================================================================
+# Covenant — private_settlement Circuit: Prolog.toml
+# ============================================================================
+# Example witness inputs for 'nargo execute'.
+#
+# USAGE:
+#   nargo execute witness
+#   bb prove -b target/private_settlement.json -w target/witness.gz -o proof.bin
+#   bb verify -k vk.bin -p proof.bin
+#
+# This example: Tier 4 sender transfers 50,000 USDC.
+#   - Sender balance: 200,000 USDC
+#   - Compliance tier: 4 (Gold, $800K limit)
+#   - Amount: 50,000 (within tier limit: 800,000 * 4/5 = 800,000)
+#   - Recipient tier: 3 (meets min_recipient_tier of 2)
+# ============================================================================
+
+# ── Private inputs ─────────────────────────────────────────────────────────
+
+# amount: Transfer amount in asset base units (6 decimals for USDC)
+# 50000000000 = $50,000 USDC (6 decimal places: 50000 * 1_000_000)
+amount = "50000"
+
+# sender_balance: Sender's verified USDC balance (must be >= amount)
+sender_balance = "200000"
+
+# compliance_tier: Sender's compliance tier from CovenantRegistry (1-5)
+compliance_tier = "4"
+
+# sender_secret: Sender's credential secret (same as used in compliance_credential)
+sender_secret = "111111111"
+
+# recipient_tier: Recipient's compliance tier (must be >= min_recipient_tier)
+recipient_tier = "3"
+
+# ── Public inputs ────────────────────────────────────────────────────────────
+
+# settlement_id: Unique settlement identifier (typically a counter)
+settlement_id = "1"
+
+# min_recipient_tier: Minimum compliance tier required for this settlement type
+# (set by the institution based on regulatory jurisdiction)
+min_recipient_tier = "2"
+
+# max_amount: Global maximum settlement amount (institution-configured cap)
+max_amount = "1000000"
+
+# asset_id: Hash of the asset being transferred
+# For USDC: poseidon2(["USDC"]) — use your asset's hash
+asset_id = "7"
+
+# compliance_nullifier: Nullifier from sender's compliance credential
+# Obtained from CovenantRegistry after credential issuance
+compliance_nullifier = "12345678901234567890"
+
+# current_timestamp: Current Stellar ledger close timestamp (Unix, seconds)
+current_timestamp = "1750000000"

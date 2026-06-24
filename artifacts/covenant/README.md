@@ -1,11 +1,16 @@
 # Covenant — ZK Compliance Credentials on Stellar
 
-> **Privacy with Provable Compliance** — Zero-knowledge verified cross-border stablecoin settlements on Stellar
+> **Privacy with Provable Compliance** — Zero-knowledge verified cross-border stablecoin settlements on Stellar  
+> 🏆 **Stellar Hacks: Real-World ZK · June 2026**
 
 [![Stellar Testnet](https://img.shields.io/badge/Stellar-Testnet-blue?logo=stellar)](https://stellar.expert/explorer/testnet/account/GBYDMVBXNU7O2VIJBGTSSLBEQLBP4IHA54XFUJAOBDYZGP2BLRTOSE2V)
 [![Noir Circuits](https://img.shields.io/badge/Noir-UltraHonk-purple)](https://noir-lang.org/)
 [![Soroban](https://img.shields.io/badge/Soroban-Protocol%2026-green)](https://developers.stellar.org/docs/smart-contracts)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
+
+> **For Judges**: See [SUBMISSION.md](SUBMISSION.md) for the full judging write-up.  
+> **Demo video script**: [DEMO_SCRIPT.md](DEMO_SCRIPT.md)  
+> **Live account**: [stellar.expert/testnet](https://stellar.expert/explorer/testnet/account/GBYDMVBXNU7O2VIJBGTSSLBEQLBP4IHA54XFUJAOBDYZGP2BLRTOSE2V) — real ledger data, 10,000 XLM
 
 ---
 

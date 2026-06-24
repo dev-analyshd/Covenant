@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import {
-  Lock, Globe, CheckCircle2, Loader2, ArrowRight, Info,
+  Lock, Globe, CheckCircle2, Loader2, Info,
   ExternalLink, Shield, Copy, AlertCircle
 } from "lucide-react";
 import { useCovenantStore, SettlementRecord } from "../lib/store";

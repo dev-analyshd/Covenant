@@ -1,13 +1,11 @@
-import { useEffect } from "react";
 import {
-  Shield, Lock, Eye, Zap, Globe, Activity, FileCheck, Database,
-  ExternalLink, Clock, ArrowUpRight, CheckCircle2, AlertTriangle,
-  TrendingUp, Server, Cpu, Hash
+  Shield, Lock, Eye, Zap, Globe, Activity, FileCheck,
+  ExternalLink, CheckCircle2, AlertTriangle,
+  TrendingUp, Server
 } from "lucide-react";
 import { useCovenantStore } from "../lib/store";
 import {
-  COVENANT_PUBLIC, shortKey, explorerTx, explorerAccount,
-  formatXLM
+  COVENANT_PUBLIC, shortKey, explorerTx, explorerAccount
 } from "../lib/stellar";
 
 function StatCard({
