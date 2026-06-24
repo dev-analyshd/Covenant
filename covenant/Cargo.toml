@@ -1,0 +1,21 @@
+[workspace]
+members = [
+  "contracts/covenant_registry",
+  "contracts/covenant_settlement",
+  "contracts/covenant_compliance_bridge",
+  "contracts/ultrahonk_verifier",
+]
+resolver = "2"
+
+[workspace.dependencies]
+soroban-sdk = { version = "22.0.7", default-features = false }
+soroban-token-sdk = { version = "22.0.7", default-features = false }
+
+[profile.release]
+opt-level = "z"
+overflow-checks = true
+debug = 0
+strip = true
+lto = true
+panic = "abort"
+codegen-units = 1
