@@ -183,13 +183,29 @@ export async function registerCredential(params: {
   tier: number;
   addressCommitment: string;
   viewKeyHash: string;
+  proofHex?: string;
 }): Promise<string> {
   const ids = await getContractIds();
   if (!ids.covenant_registry) {
     throw new Error("CovenantRegistry not deployed");
   }
 
-  const proof = buildSimulatedProof();
+  let proof: Uint8Array;
+  if (params.proofHex) {
+    const hex = params.proofHex.replace(/^0x/, "");
+    proof = new Uint8Array(hex.length / 2);
+    for (let i = 0; i < proof.length; i++) {
+      proof[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+    }
+    if (proof.length < 256) {
+      const padded = new Uint8Array(256);
+      padded.set(proof);
+      proof = padded;
+    }
+  } else {
+    proof = buildSimulatedProof();
+  }
+
   const publicInputs = buildPublicInputs(params);
 
   return buildSorobanTx(ids.covenant_registry, "register_credential", [
@@ -208,13 +224,29 @@ export async function initiateSettlement(params: {
   tier: number;
   viewKeyHash: string;
   recipientPublic?: string;
+  proofHex?: string;
 }): Promise<string> {
   const ids = await getContractIds();
   if (!ids.covenant_settlement) {
     throw new Error("CovenantSettlement not deployed");
   }
 
-  const proof = buildSimulatedProof();
+  let proof: Uint8Array;
+  if (params.proofHex) {
+    const hex = params.proofHex.replace(/^0x/, "");
+    proof = new Uint8Array(hex.length / 2);
+    for (let i = 0; i < proof.length; i++) {
+      proof[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+    }
+    if (proof.length < 256) {
+      const padded = new Uint8Array(256);
+      padded.set(proof);
+      proof = padded;
+    }
+  } else {
+    proof = buildSimulatedProof();
+  }
+
   const publicInputs = buildPublicInputs({
     nullifier: params.settlementHash,
     tier: params.tier,

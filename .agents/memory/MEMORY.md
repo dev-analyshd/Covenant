@@ -1,3 +1,4 @@
 - [Covenant project state](covenant-state.md) — All 4 contracts deployed on Stellar testnet (June 25 2026); IDs, deployment quirks, and frontend status documented.
 - [React warning investigation](react-warning.md) — "Functions not valid as React child" warning persists in Replit preview regardless of code changes; appears to be from Replit's proxy/dev infrastructure, not app code.
-- [Covenant workflow startup](covenant-workflow.md) — workflow command must include PORT and BASE_PATH env vars inline: `PORT=21115 BASE_PATH=/ pnpm --filter @workspace/covenant run dev`
+- [Covenant workflow startup](covenant-workflow.md) — workflow command must include PORT and BASE_PATH env vars inline: `PORT=5000 BASE_PATH=/ API_PORT=3000 pnpm --filter @workspace/covenant run dev`
+- [Covenant proof flow](covenant-proof-flow.md) — Real BN254 proof bytes now flow end-to-end; registerCredential and initiateSettlement both accept proofHex param; SettlementPanel calls both sendPayment AND initiateSettlement.

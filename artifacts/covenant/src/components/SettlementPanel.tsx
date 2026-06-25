@@ -5,7 +5,7 @@ import {
 } from "lucide-react";
 import { useCovenantStore, SettlementRecord } from "../lib/store";
 import { COVENANT_PUBLIC, explorerTx, sendPayment } from "../lib/stellar";
-import { generateCredentialSecret } from "../lib/contracts";
+import { initiateSettlement } from "../lib/contracts";
 import { proveSettlement, verifyProofOffChain } from "../lib/prover";
 
 type Step = "form" | "proving" | "submitting" | "completed";
@@ -129,9 +129,12 @@ export default function SettlementPanel() {
 
     let txHash: string | undefined;
     let onChain = false;
+    let settlementContractHash: string | undefined;
 
-    // Step 6: broadcast real Stellar payment with settlement hash as memo
+    // Step 6: broadcast real Stellar payment + call CovenantSettlement contract
     setProvingIdx(6);
+
+    // Send real XLM payment with settlement hash as memo
     try {
       txHash = await sendPayment({
         toPublic: form.recipient,
@@ -140,8 +143,27 @@ export default function SettlementPanel() {
       });
       onChain = true;
     } catch (err: any) {
-      console.warn("Settlement tx failed:", err.message);
+      console.warn("Settlement payment failed:", err.message);
       setError("Settlement recorded locally — live payment requires sufficient XLM balance.");
+    }
+
+    // Call CovenantSettlement::initiate_settlement with real ZK proof
+    const senderCommitment = settlementProof?.witness?.senderCommitment
+      ? "0x" + settlementProof.witness.senderCommitment
+      : settlementHash;
+    try {
+      settlementContractHash = await initiateSettlement({
+        settlementHash,
+        senderCommitment,
+        tier: bestTier || 3,
+        viewKeyHash,
+        recipientPublic: form.recipient,
+        proofHex: proofHex,
+      });
+      if (!txHash) txHash = settlementContractHash;
+      onChain = true;
+    } catch (contractErr: any) {
+      console.warn("CovenantSettlement contract call failed:", contractErr.message);
     }
 
     setProgress(100);

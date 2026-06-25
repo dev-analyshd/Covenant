@@ -156,7 +156,7 @@ async function deriveKey(passphrase: string, salt: Uint8Array): Promise<CryptoKe
     ["deriveKey"]
   );
   return crypto.subtle.deriveKey(
-    { name: "PBKDF2", salt, iterations: 100_000, hash: "SHA-256" },
+    { name: "PBKDF2", salt: salt as unknown as ArrayBuffer, iterations: 100_000, hash: "SHA-256" },
     baseKey,
     { name: "AES-GCM", length: 256 },
     false,
@@ -230,7 +230,7 @@ export async function retrieveCredentialSecret(
   if (!stored) return null;
 
   const key = await deriveKey(passphrase, stored.salt);
-  const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv: stored.iv }, key, stored.encryptedSecret);
+  const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv: stored.iv as unknown as ArrayBuffer }, key, stored.encryptedSecret);
   const secretHex = Array.from(new Uint8Array(decrypted)).map(b => b.toString(16).padStart(2, "0")).join("");
 
   const { encryptedSecret: _, iv: __, salt: ___, ...meta } = stored;

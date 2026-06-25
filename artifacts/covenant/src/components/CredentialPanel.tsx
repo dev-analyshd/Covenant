@@ -208,6 +208,7 @@ export default function CredentialPanel() {
         tier: t,
         addressCommitment,
         viewKeyHash,
+        proofHex: proofResult?.proof,
       });
       onChain = true;
     } catch (err: any) {
