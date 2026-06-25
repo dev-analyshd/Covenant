@@ -36,10 +36,10 @@ export const DEMO_PUBLIC = DEMO_KEYPAIR.publicKey();
 // ── Contract IDs — all 4 deployed to Stellar testnet June 25 2026 ────────────
 // Hardcoded as canonical fallback; also served via /contract-ids.json (Vite public)
 export const CONTRACTS = {
-  ultrahonk_verifier:        "CC66GX7NOKUVE7GBU56E5Z3BEOFEPNJ7VEN7DSB5ZS3NDCHDAFGUR257",
-  covenant_registry:          "CBHH4GISNRX2NWE7OQA4CK26JPRTLI5QXSZVBE7MQJGLI5SYWUOY4H2S",
-  covenant_settlement:        "CCBD23TQUGAD7YPVZCDVM6UKYVKXQYGPR3JWKVNFKRUWM2GNQEAG5ODA",
-  covenant_compliance_bridge: "CDXXIBLVGZWJ7BCPXC423RPWTVSE43KHIVYBMPVMPPOJFZFDI7VZRLBE",
+  ultrahonk_verifier:        "CAURSBIA5JVEZTRDN2OATBLMQUUTNEDFKJUDHUB5KBDKF3JCGCT67VYW",
+  covenant_registry:          "CDGVCDVWUZSCO4AIE34RVOEV7GUMZYGS7WN7PIJMZF5GN3K7WI3NZ7NJ",
+  covenant_settlement:        "CC2CNABDTKZ7ZJGZHP24IE43GNW7PUZPOUZJ6SNGMSLQVWEGQO62EKKI",
+  covenant_compliance_bridge: "CCHOTPRBSC52QENAQ7KTZN6BMYZG4JD3JOZ7GXPUVIA5X2LVF6QT3JP2",
 } as const;
 
 export type ContractIds = typeof CONTRACTS;
