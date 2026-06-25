@@ -7,7 +7,7 @@
 
 ## Before Recording
 
-1. Open [http://localhost:21115](http://localhost:21115) in a full-screen browser (Chrome preferred)
+1. Open the live app URL (or `http://localhost:5000` if running locally) in a full-screen browser (Chrome preferred)
 2. Open [https://stellar.expert/explorer/testnet/account/GBYDMVBXNU7O2VIJBGTSSLBEQLBP4IHA54XFUJAOBDYZGP2BLRTOSE2V](https://stellar.expert/explorer/testnet/account/GBYDMVBXNU7O2VIJBGTSSLBEQLBP4IHA54XFUJAOBDYZGP2BLRTOSE2V) in another tab
 3. Use a screen recorder (Loom, OBS, QuickTime)
 4. Have terminal ready with circuit code visible

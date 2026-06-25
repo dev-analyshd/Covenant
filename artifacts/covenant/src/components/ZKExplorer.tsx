@@ -8,7 +8,8 @@ import { useCovenantStore } from "../lib/store";
 const CONTRACTS = [
   {
     name: "UltraHonkVerifier",
-    address: "CBJZ…X4QK",
+    address: "CC66…R257",
+    fullAddress: "CC66GX7NOKUVE7GBU56E5Z3BEOFEPNJ7VEN7DSB5ZS3NDCHDAFGUR257",
     color: "#3b82f6",
     desc: "Verifies Noir UltraHonk proofs using Protocol 26 BN254 host functions",
     functions: [
@@ -19,7 +20,8 @@ const CONTRACTS = [
   },
   {
     name: "CovenantRegistry",
-    address: "CCVA…8MNP",
+    address: "CBHH…4H2S",
+    fullAddress: "CBHH4GISNRX2NWE7OQA4CK26JPRTLI5QXSZVBE7MQJGLI5SYWUOY4H2S",
     color: "#8b5cf6",
     desc: "Credential lifecycle management — nullifier tracking, tier storage, revocation",
     functions: [
@@ -32,7 +34,8 @@ const CONTRACTS = [
   },
   {
     name: "CovenantSettlement",
-    address: "CDSE…7WRA",
+    address: "CCBD…5ODA",
+    fullAddress: "CCBD23TQUGAD7YPVZCDVM6UKYVKXQYGPR3JWKVNFKRUWM2GNQEAG5ODA",
     color: "#10b981",
     desc: "ZK-gated SAC transfers with encrypted compliance trail and regulator audit portal",
     functions: [
@@ -44,7 +47,8 @@ const CONTRACTS = [
   },
   {
     name: "CovenantComplianceBridge",
-    address: "CBRI…2LFK",
+    address: "CDXX…RLBE",
+    fullAddress: "CDXXIBLVGZWJ7BCPXC423RPWTVSE43KHIVYBMPVMPPOJFZFDI7VZRLBE",
     color: "#f59e0b",
     desc: "Cross-currency settlement via Stellar DEX path payment with compliance enforcement",
     functions: [
@@ -283,10 +287,17 @@ export default function ZKExplorer() {
                   </div>
                   <p className="text-xs mt-0.5" style={{ color: "var(--color-text-muted)" }}>{contract.desc}</p>
                 </div>
-                <div className="font-mono text-xs rounded px-2 py-1 flex-shrink-0"
-                  style={{ background: `${contract.color}10`, color: contract.color }}>
+                <a
+                  href={`https://stellar.expert/explorer/testnet/contract/${contract.fullAddress}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-mono text-xs rounded px-2 py-1 flex-shrink-0 flex items-center gap-1 hover:opacity-80 transition-opacity"
+                  style={{ background: `${contract.color}10`, color: contract.color }}
+                  title={contract.fullAddress}
+                >
                   {contract.address}
-                </div>
+                  <ExternalLink size={10} />
+                </a>
               </div>
               <div className="space-y-1 mb-3">
                 {contract.functions.map((fn, i) => (

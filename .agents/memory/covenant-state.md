@@ -39,7 +39,17 @@ All 5 tabs complete and TypeScript-clean (0 errors):
 2. **Credential** — `registerCredential()` calls CovenantRegistry on-chain via Soroban RPC  
 3. **Settlement** — wired to proving API (`proveSettlement`) + off-chain verification + real XLM tx  
 4. **Regulator** — audit settlement + issuer root governance (fixed `contractIds.contracts` bug)  
-5. **ZK Explorer** — circuit explainer  
+5. **ZK Explorer** — circuit explainer; address badges now show real deployed IDs (CC66…R257 etc.) with clickable links to stellar.expert  
+
+## Submission Docs Status (June 25 2026)
+
+All docs complete and accurate:
+- `artifacts/covenant/README.md` — comprehensive, has "Deployed Contract Addresses" table with real IDs + stellar.expert links
+- `artifacts/covenant/SUBMISSION.md` — has deployed contract IDs table + honest testnet limitations section
+- `artifacts/covenant/DEMO_SCRIPT.md` — 2:30–3:00 minute script, port corrected to `localhost:5000`
+- `artifacts/covenant/docs/ARCHITECTURE.md` + `docs/CIRCUITS.md` — full technical docs
+- Root `README.md` — created with quick links to covenant project + deployed contract IDs
+- Both Noir circuit files: `circuits/compliance_credential/src/main.nr` + `circuits/private_settlement/src/main.nr` — real, working Noir code with unit tests
 
 ## Key Technical Facts
 

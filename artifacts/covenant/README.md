@@ -152,6 +152,20 @@ Properties:
 
 ## Smart Contracts (Soroban Protocol 26)
 
+### Deployed Contract Addresses (Stellar Testnet)
+
+| Contract | Address | Explorer |
+|----------|---------|---------|
+| `UltraHonkVerifier` | `CC66GX7NOKUVE7GBU56E5Z3BEOFEPNJ7VEN7DSB5ZS3NDCHDAFGUR257` | [View →](https://stellar.expert/explorer/testnet/contract/CC66GX7NOKUVE7GBU56E5Z3BEOFEPNJ7VEN7DSB5ZS3NDCHDAFGUR257) |
+| `CovenantRegistry` | `CBHH4GISNRX2NWE7OQA4CK26JPRTLI5QXSZVBE7MQJGLI5SYWUOY4H2S` | [View →](https://stellar.expert/explorer/testnet/contract/CBHH4GISNRX2NWE7OQA4CK26JPRTLI5QXSZVBE7MQJGLI5SYWUOY4H2S) |
+| `CovenantSettlement` | `CCBD23TQUGAD7YPVZCDVM6UKYVKXQYGPR3JWKVNFKRUWM2GNQEAG5ODA` | [View →](https://stellar.expert/explorer/testnet/contract/CCBD23TQUGAD7YPVZCDVM6UKYVKXQYGPR3JWKVNFKRUWM2GNQEAG5ODA) |
+| `CovenantComplianceBridge` | `CDXXIBLVGZWJ7BCPXC423RPWTVSE43KHIVYBMPVMPPOJFZFDI7VZRLBE` | [View →](https://stellar.expert/explorer/testnet/contract/CDXXIBLVGZWJ7BCPXC423RPWTVSE43KHIVYBMPVMPPOJFZFDI7VZRLBE) |
+
+All four contracts are live on Stellar Testnet and were deployed using:
+```
+stellar contract deploy --network testnet --source SAWLPNNYGPLCLYO5PPUCW5MHQ6EYCBONVLASEH3GENWP276OSTJNGKXQ
+```
+
 ### `UltraHonkVerifier`
 BN254 proof verification pipeline using Protocol 26 host functions:
 

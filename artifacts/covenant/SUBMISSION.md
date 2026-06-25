@@ -107,7 +107,14 @@ Key design decisions:
 - **Custom Merkle implementation**: We implement `poseidon2_merkle_root()` directly using `dep::std::hash::poseidon2` rather than `dep::std::merkle::compute_merkle_root`, to guarantee compatibility with Stellar's Poseidon2 host function.
 - **32-level trees**: Supports up to 2^32 (~4 billion) issuer credentials without changing the circuit.
 
-### Smart Contracts (Soroban Protocol 26)
+### Smart Contracts (Soroban Protocol 26) — Live on Testnet
+
+| Contract | Deployed Address |
+|----------|-----------------|
+| `UltraHonkVerifier` | `CC66GX7NOKUVE7GBU56E5Z3BEOFEPNJ7VEN7DSB5ZS3NDCHDAFGUR257` |
+| `CovenantRegistry` | `CBHH4GISNRX2NWE7OQA4CK26JPRTLI5QXSZVBE7MQJGLI5SYWUOY4H2S` |
+| `CovenantSettlement` | `CCBD23TQUGAD7YPVZCDVM6UKYVKXQYGPR3JWKVNFKRUWM2GNQEAG5ODA` |
+| `CovenantComplianceBridge` | `CDXXIBLVGZWJ7BCPXC423RPWTVSE43KHIVYBMPVMPPOJFZFDI7VZRLBE` |
 
 ```
 contracts/
@@ -157,7 +164,7 @@ We are transparent about this, as requested in the submission guidelines.
 ```bash
 pnpm install
 pnpm --filter @workspace/covenant run dev
-# → http://localhost:21115
+# → http://localhost:5000
 ```
 
 ### Circuit Tests
