@@ -13,9 +13,10 @@ export const TESTNET_HORIZON = "https://horizon-testnet.stellar.org";
 export const TESTNET_RPC = "https://soroban-testnet.stellar.org";
 export const NETWORK_PASSPHRASE = Networks.TESTNET;
 
-export const COVENANT_KEYPAIR = Keypair.fromSecret(
-  "SAWLPNNYGPLCLYO5PPUCW5MHQ6EYCBONVLASEH3GENWP276OSTJNGKXQ"
-);
+const STELLAR_SECRET =
+  import.meta.env.VITE_STELLAR_SECRET_KEY ??
+  "SAWLPNNYGPLCLYO5PPUCW5MHQ6EYCBONVLASEH3GENWP276OSTJNGKXQ";
+export const COVENANT_KEYPAIR = Keypair.fromSecret(STELLAR_SECRET);
 export const COVENANT_PUBLIC = COVENANT_KEYPAIR.publicKey();
 
 export const server = new Horizon.Server(TESTNET_HORIZON);
