@@ -25,6 +25,7 @@ export interface CredentialRecord {
   proofSizeBytes: number;
   circuitConstraints: number;
   onChain?: boolean;
+  backupExported?: boolean;
 }
 
 export interface SettlementRecord {
@@ -41,6 +42,8 @@ export interface SettlementRecord {
   proofBytes: string;
   ledger?: number;
   gasUsed?: number;
+  gasXlm?: string;
+  gasUsd?: string;
   onChain?: boolean;
 }
 
@@ -52,6 +55,30 @@ export interface AuditLogEntry {
   timestamp: Date;
   jurisdiction: string;
   accessLogged: boolean;
+}
+
+export interface ASPDeposit {
+  id: string;
+  commitmentHash: string;
+  asset: string;
+  amountBand: string;
+  privacySetSize: number;
+  timestamp: Date;
+  travelRuleRequired: boolean;
+  travelRuleCompleted: boolean;
+  vasp: string;
+}
+
+export interface ASPWithdrawal {
+  id: string;
+  depositId: string;
+  membershipProof: string;
+  asset: string;
+  amountBand: string;
+  timestamp: Date;
+  recipientVasp: string;
+  travelRuleExchange: boolean;
+  privacySetSize: number;
 }
 
 interface CovenantState {
@@ -67,6 +94,8 @@ interface CovenantState {
   credentials: CredentialRecord[];
   settlements: SettlementRecord[];
   auditLog: AuditLogEntry[];
+  aspDeposits: ASPDeposit[];
+  aspWithdrawals: ASPWithdrawal[];
 
   totalProofsGenerated: number;
   totalProofBytes: number;
@@ -74,8 +103,11 @@ interface CovenantState {
   setWalletConnected: (v: boolean) => void;
   refresh: () => Promise<void>;
   addCredential: (c: CredentialRecord) => void;
+  updateCredential: (id: string, updates: Partial<CredentialRecord>) => void;
   addSettlement: (s: SettlementRecord) => void;
   addAuditEntry: (a: AuditLogEntry) => void;
+  addASPDeposit: (d: ASPDeposit) => void;
+  addASPWithdrawal: (w: ASPWithdrawal) => void;
 }
 
 export const useCovenantStore = create<CovenantState>((set, get) => ({
@@ -90,6 +122,8 @@ export const useCovenantStore = create<CovenantState>((set, get) => ({
   credentials: [],
   settlements: [],
   auditLog: [],
+  aspDeposits: [],
+  aspWithdrawals: [],
   totalProofsGenerated: 0,
   totalProofBytes: 0,
 
@@ -124,6 +158,11 @@ export const useCovenantStore = create<CovenantState>((set, get) => ({
       totalProofBytes: s.totalProofBytes + c.proofSizeBytes,
     })),
 
+  updateCredential: (id, updates) =>
+    set((s) => ({
+      credentials: s.credentials.map((c) => (c.id === id ? { ...c, ...updates } : c)),
+    })),
+
   addSettlement: (s) =>
     set((st) => ({
       settlements: [s, ...st.settlements],
@@ -133,4 +172,10 @@ export const useCovenantStore = create<CovenantState>((set, get) => ({
 
   addAuditEntry: (a) =>
     set((s) => ({ auditLog: [a, ...s.auditLog] })),
+
+  addASPDeposit: (d) =>
+    set((s) => ({ aspDeposits: [d, ...s.aspDeposits] })),
+
+  addASPWithdrawal: (w) =>
+    set((s) => ({ aspWithdrawals: [w, ...s.aspWithdrawals] })),
 }));

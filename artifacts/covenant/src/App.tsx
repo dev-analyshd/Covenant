@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   Shield, Activity, FileCheck, Zap, Eye, Globe, RefreshCw,
-  ExternalLink, AlertCircle, Cpu
+  ExternalLink, AlertCircle, Cpu, Users
 } from "lucide-react";
 import { useCovenantStore } from "./lib/store";
 import { COVENANT_PUBLIC, shortKey, explorerAccount } from "./lib/stellar";
@@ -10,14 +10,16 @@ import CredentialPanel from "./components/CredentialPanel";
 import SettlementPanel from "./components/SettlementPanel";
 import RegulatorPanel from "./components/RegulatorPanel";
 import ZKExplorer from "./components/ZKExplorer";
+import ASPPanel from "./components/ASPPanel";
 
-type Tab = "dashboard" | "credential" | "settlement" | "regulator" | "zkexplorer";
+type Tab = "dashboard" | "credential" | "settlement" | "regulator" | "asp" | "zkexplorer";
 
-const TAB_DEFS: { id: Tab; label: string; desc: string }[] = [
+const TAB_DEFS: { id: Tab; label: string; desc: string; isNew?: boolean }[] = [
   { id: "dashboard",   label: "Dashboard",   desc: "Live testnet overview" },
   { id: "credential",  label: "Credential",  desc: "ZK compliance proof" },
   { id: "settlement",  label: "Settlement",  desc: "Private transfer" },
   { id: "regulator",   label: "Regulator",   desc: "Audit portal" },
+  { id: "asp",         label: "ASP",         desc: "Privacy set & FATF Travel Rule", isNew: true },
   { id: "zkexplorer",  label: "ZK Explorer", desc: "Technical deep dive" },
 ];
 
@@ -26,6 +28,7 @@ function tabIcon(id: Tab) {
   if (id === "credential")  return <FileCheck size={15} />;
   if (id === "settlement")  return <Zap size={15} />;
   if (id === "regulator")   return <Eye size={15} />;
+  if (id === "asp")         return <Users size={15} />;
   return <Cpu size={15} />;
 }
 
@@ -170,12 +173,20 @@ export default function App() {
             >
               {tabIcon(t.id)}
               <span>{t.label}</span>
-              {t.id === "zkexplorer" && (
+              {t.isNew && (
+                <span
+                  className="text-xs px-1 py-0.5 rounded"
+                  style={{ background: "rgba(245,158,11,0.15)", color: "#fbbf24", fontSize: "0.6rem" }}
+                >
+                  NEW
+                </span>
+              )}
+              {t.id === "zkexplorer" && !t.isNew && (
                 <span
                   className="text-xs px-1 py-0.5 rounded"
                   style={{ background: "rgba(59,130,246,0.15)", color: "#60a5fa", fontSize: "0.6rem" }}
                 >
-                  NEW
+                  ZK
                 </span>
               )}
             </button>
@@ -199,6 +210,7 @@ export default function App() {
         {tab === "credential" && <CredentialPanel />}
         {tab === "settlement" && <SettlementPanel />}
         {tab === "regulator"  && <RegulatorPanel />}
+        {tab === "asp"        && <ASPPanel />}
         {tab === "zkexplorer" && <ZKExplorer />}
       </main>
 
