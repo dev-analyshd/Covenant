@@ -391,9 +391,7 @@ impl UltraHonkVerifier {
         Ok(())
     }
 
-    // ── KZG Binding Verification ─────────────────────────────────────────────
-    //
-    // ── Protocol 26 Production Path (--features protocol26) ─────────────────
+    // ── KZG Binding Verification — Full BN254 Pairing (Protocol 26) ──────────
     //
     //   KZG opening equation for polynomial f committed in W1:
     //     W1 = [f(τ)]₁  (committed wire polynomial)
@@ -411,85 +409,47 @@ impl UltraHonkVerifier {
     //     3. Build P1 = [W1, -π], P2 = [VK_G₂, G₂_GEN]
     //     4. Call env.crypto().bn254_pairing_check(P1, P2)
     //
-    // ── Testnet Structural Path (default) ───────────────────────────────────
-    //
-    //   Enhanced multi-byte structural binding check (8 bytes):
-    //     Verifies: W1 × transcript ≡ kzg_eval × vk_low (mod 2³²)
-    //   This is a structural analogue — not a real pairing check.
-    //   Use --features protocol26 for production deployment.
+    //   Testnet SRS (τ=1): VK_G₂ = G₂, W1 = kzg_eval·G₁
+    //   Production SRS: VK_G₂ = [τ]G₂ from Barretenberg CRS
+    //   Requires: soroban-sdk ≥ 26.0.1 on Stellar Protocol 26 host
     //
     fn verify_kzg_binding(
         env: &Env,
         p: &UltraHonkProof,
-        transcript: &[u8; 32],
+        _transcript: &[u8; 32],
         vk: &[u8; 128],
     ) -> Result<(), VerifierError> {
+        // Step 1: Reconstruct opening proof π = kzg_eval · G₁
+        // (kzg_eval is the evaluation of the quotient polynomial at the KZG challenge)
+        let g1_gen = BytesN::from_array(env, &G1_GEN);
+        let kzg_scalar = BytesN::from_array(env, &p.kzg_eval);
+        let pi: BytesN<64> = env.crypto().bn254_g1_mul(g1_gen, kzg_scalar);
 
-        // ── PRODUCTION: Full BN254 pairing check via Protocol 26 ─────────────
-        // Requires: soroban-sdk ≥ 23.0 and `--features protocol26`
-        #[cfg(feature = "protocol26")]
-        {
-            // Step 1: Reconstruct opening proof π = kzg_eval · G₁
-            let g1_gen = BytesN::from_array(env, &G1_GEN);
-            let kzg_scalar = BytesN::from_array(env, &p.kzg_eval);
-            let pi: BytesN<64> = env.crypto().bn254_g1_mul(g1_gen, kzg_scalar);
+        // Step 2: Negate π → -π = (π.x, Fp - π.y)
+        let pi_neg = Self::g1_negate(env, &pi)?;
 
-            // Step 2: Negate π → -π = (π.x, Fp - π.y)
-            let pi_neg = Self::g1_negate(env, &pi)?;
+        // Step 3: Build pairing input pairs
+        //   P1 = [W1, -π]  (G1 points)
+        //   P2 = [VK_G₂, G₂_GEN]  (G2 points)
+        let mut p1_vec: Vec<BytesN<64>> = Vec::new(env);
+        p1_vec.push_back(BytesN::from_array(env, &p.w1));
+        p1_vec.push_back(pi_neg);
 
-            // Step 3: Build P1 = [W1, -π]
-            let mut p1_vec: Vec<BytesN<64>> = Vec::new(env);
-            p1_vec.push_back(BytesN::from_array(env, &p.w1));
-            p1_vec.push_back(pi_neg);
+        // VK_G₂ = [τ]G₂ from Barretenberg trusted setup (stored at initialization)
+        // Testnet: VK_G₂ = G₂ (τ=1 trivial SRS) → W1 must equal kzg_eval·G₁
+        let mut p2_vec: Vec<BytesN<128>> = Vec::new(env);
+        p2_vec.push_back(BytesN::from_array(env, vk));
+        p2_vec.push_back(BytesN::from_array(env, &G2_GEN));
 
-            // Step 4: Build P2 = [VK_G₂, G₂_GEN]
-            // VK_G₂ = [τ]G₂ from Barretenberg SRS (stored at initialization)
-            let mut p2_vec: Vec<BytesN<128>> = Vec::new(env);
-            p2_vec.push_back(BytesN::from_array(env, vk));
-            p2_vec.push_back(BytesN::from_array(env, &G2_GEN));
-
-            // Step 5: Bilinear pairing check (Protocol 26 BN254 host function)
-            // Verifies: e(W1, VK_G₂) · e(-π, G₂) = 1_GT
-            let pairing_ok = env.crypto().bn254_pairing_check(p1_vec, p2_vec);
-            if !pairing_ok {
-                return Err(VerifierError::PairingCheckFailed);
-            }
-            return Ok(());
+        // Step 4: Bilinear pairing check (Stellar Protocol 26 BN254 host function)
+        // Verifies: e(W1, VK_G₂) · e(-kzg_eval·G₁, G₂) = 1_GT
+        // This confirms W1 was correctly committed under τ in the trusted setup.
+        let pairing_ok = env.crypto().bn254_pairing_check(p1_vec, p2_vec);
+        if !pairing_ok {
+            return Err(VerifierError::PairingCheckFailed);
         }
 
-        // ── TESTNET: Enhanced structural binding check (8-byte) ──────────────
-        // Checks algebraic consistency of W1 commitment vs kzg_eval scalar.
-        // Not a real pairing — serves as a structural validity gate for testnet.
-        #[cfg(not(feature = "protocol26"))]
-        {
-            // W1_x must be non-trivial (not a small constant)
-            if p.w1[0..4] == [0u8; 4] {
-                return Err(VerifierError::PairingCheckFailed);
-            }
-
-            // Multi-byte consistency: accumulate 8-byte field dot products
-            // lhs = dot(W1_low8, transcript_low8)
-            // rhs = dot(kzg_eval_low8, vk_low8)
-            // These must be non-trivially non-zero (not a trivial degenerate proof)
-            let lhs = Self::field_dot_u32(&p.w1[24..32], &transcript[24..32]);
-            let rhs = Self::field_dot_u32(&p.kzg_eval[24..32], &vk[0..8]);
-
-            // Reject: lhs == rhs == 0 (degenerate/trivial proof)
-            if lhs == 0 && rhs == 0 {
-                return Err(VerifierError::PairingCheckFailed);
-            }
-
-            // Cross-coordinate binding: W2 must relate to W1 via γ challenge
-            // This catches forged proofs where W2 is entirely independent of W1.
-            let w1_low = u32::from_be_bytes([p.w1[60], p.w1[61], p.w1[62], p.w1[63]]);
-            let w2_low = u32::from_be_bytes([p.w2[60], p.w2[61], p.w2[62], p.w2[63]]);
-            // W2_y must be different from W1_y (collinear proofs are invalid)
-            if w1_low == w2_low && p.w1[0] == p.w2[0] {
-                return Err(VerifierError::PairingCheckFailed);
-            }
-
-            return Ok(());
-        }
+        Ok(())
     }
 
     /// Negate a BN254 G1 point: (x, y) → (x, Fp - y)
@@ -498,7 +458,6 @@ impl UltraHonkVerifier {
     ///   0x30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd47
     ///
     /// Used in the KZG pairing check to compute -π from π.
-    #[allow(dead_code)]  // Used in protocol26 path only
     fn g1_negate(env: &Env, point: &BytesN<64>) -> Result<BytesN<64>, VerifierError> {
         let arr = point.to_array();
         let x = &arr[0..32];
@@ -726,5 +685,216 @@ mod test {
         assert_eq!(neg_arr[63], 0x47u8.wrapping_sub(2));
         // y must not be 2
         assert_ne!(&neg_arr[32..64], &G1_GEN[32..64]);
+    }
+
+    #[test]
+    fn test_double_initialize_fails() {
+        let env = Env::default();
+        let (client, admin) = setup(&env);
+        // Second init must fail with AlreadyInitialized
+        let err = client.try_initialize(
+            &admin,
+            &BytesN::from_array(&env, &G2_GEN),
+            &BytesN::from_array(&env, &G2_GEN),
+        );
+        assert!(err.is_err());
+    }
+
+    #[test]
+    fn test_unauthorized_vk_update_fails() {
+        let env = Env::default();
+        let (client, _admin) = setup(&env);
+        let impostor = soroban_sdk::Address::generate(&env);
+        let new_vk = BytesN::from_array(&env, &[0x77u8; 128]);
+        // Non-admin update must fail
+        let err = client.try_update_vk(
+            &impostor,
+            &CircuitType::ComplianceCredential,
+            &new_vk,
+        );
+        assert!(err.is_err());
+    }
+
+    #[test]
+    fn test_vk_version_starts_at_1() {
+        let env = Env::default();
+        let (client, _) = setup(&env);
+        assert_eq!(client.vk_version(), 1);
+    }
+
+    #[test]
+    fn test_vk_version_increments_on_update() {
+        let env = Env::default();
+        let (client, admin) = setup(&env);
+        let new_vk = BytesN::from_array(&env, &[0xaau8; 128]);
+        client.update_vk(&admin, &CircuitType::ComplianceCredential, &new_vk);
+        assert_eq!(client.vk_version(), 2);
+        client.update_vk(&admin, &CircuitType::PrivateSettlement, &new_vk);
+        assert_eq!(client.vk_version(), 3);
+    }
+
+    #[test]
+    fn test_batch_size_mismatch_fails() {
+        let env = Env::default();
+        let (client, _) = setup(&env);
+        let proof = valid_proof(&env);
+        let mut proofs: Vec<BytesN<256>> = Vec::new(&env);
+        proofs.push_back(proof.clone());
+        proofs.push_back(proof);
+
+        // Intentionally mismatched: 2 proofs but 1 public_inputs
+        let mut batch: Vec<Vec<BytesN<32>>> = Vec::new(&env);
+        batch.push_back(pis(&env, 4));
+
+        let err = client.try_batch_verify(
+            &proofs, &batch, &CircuitType::ComplianceCredential,
+        );
+        assert!(err.is_err());
+    }
+
+    #[test]
+    fn test_sumcheck_overflow_rejected() {
+        let env = Env::default();
+        let (client, _) = setup(&env);
+        let mut b = [0u8; 256];
+        b[0] = 0x1e;             // non-zero W1_x
+        b[64] = 0x2f;            // non-zero W2_x (different from W1)
+        b[128] = 0x3c;           // non-zero W3_x
+        b[192] = 0x31;           // sumcheck[0] = 0x31 > BN254_FR[0] (0x30) → overflow!
+        b[224] = 0xab;           // non-zero kzg_eval
+        let bad_proof = BytesN::from_array(&env, &b);
+        let err = client.try_verify_compliance_proof(&bad_proof, &pis(&env, 4));
+        assert!(err.is_err()); // InvalidProof (sumcheck out of field)
+    }
+
+    #[test]
+    fn test_compliance_proof_needs_4_inputs() {
+        let env = Env::default();
+        let (client, _) = setup(&env);
+        let proof = valid_proof(&env);
+        let mut short_pis: Vec<BytesN<32>> = Vec::new(&env);
+        short_pis.push_back(BytesN::from_array(&env, &[0xAAu8; 32]));
+        short_pis.push_back(BytesN::from_array(&env, &[0x00u8; 32]));
+        short_pis.push_back(BytesN::from_array(&env, &[0xBBu8; 32]));
+        // Only 3 inputs — should fail
+        let err = client.try_verify_compliance_proof(&proof, &short_pis);
+        assert!(err.is_err());
+    }
+
+    #[test]
+    fn test_settlement_proof_needs_4_inputs() {
+        let env = Env::default();
+        let (client, _) = setup(&env);
+        let proof = valid_proof(&env);
+        let mut short_pis: Vec<BytesN<32>> = Vec::new(&env);
+        short_pis.push_back(BytesN::from_array(&env, &[0xAAu8; 32]));
+        let err = client.try_verify_settlement_proof(&proof, &short_pis);
+        assert!(err.is_err());
+    }
+
+    #[test]
+    fn test_verify_tier1_proof() {
+        let env = Env::default();
+        let (client, _) = setup(&env);
+        let proof = valid_proof(&env);
+        let result = client.verify_compliance_proof(&proof, &pis(&env, 1));
+        assert!(result.valid);
+    }
+
+    #[test]
+    fn test_verify_tier5_proof() {
+        let env = Env::default();
+        let (client, _) = setup(&env);
+        let proof = valid_proof(&env);
+        let result = client.verify_compliance_proof(&proof, &pis(&env, 5));
+        assert!(result.valid);
+    }
+
+    #[test]
+    fn test_batch_empty_succeeds() {
+        let env = Env::default();
+        let (client, _) = setup(&env);
+        let proofs: Vec<BytesN<256>> = Vec::new(&env);
+        let batch: Vec<Vec<BytesN<32>>> = Vec::new(&env);
+        let count = client.batch_verify(&proofs, &batch, &CircuitType::ComplianceCredential);
+        assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn test_batch_verify_settlement_circuit() {
+        let env = Env::default();
+        let (client, _) = setup(&env);
+        let proof = valid_proof(&env);
+        let mut proofs: Vec<BytesN<256>> = Vec::new(&env);
+        proofs.push_back(proof);
+        let mut batch: Vec<Vec<BytesN<32>>> = Vec::new(&env);
+        batch.push_back(pis(&env, 3));
+        let count = client.batch_verify(&proofs, &batch, &CircuitType::PrivateSettlement);
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn test_proof_hash_deterministic() {
+        let env = Env::default();
+        let (client, _) = setup(&env);
+        let proof = valid_proof(&env);
+        let r1 = client.verify_compliance_proof(&proof, &pis(&env, 4));
+        let r2 = client.verify_compliance_proof(&proof, &pis(&env, 4));
+        assert_eq!(r1.proof_hash, r2.proof_hash);
+    }
+
+    #[test]
+    fn test_field_dot_u32_zero() {
+        // field_dot_u32([0..0], [0..0]) = 0
+        let a = [0u8; 16];
+        let b_arr = [0u8; 16];
+        let result = UltraHonkVerifier::field_dot_u32(&a, &b_arr);
+        assert_eq!(result, 0);
+    }
+
+    #[test]
+    fn test_field_dot_u32_one() {
+        // field_dot_u32([1,0,...], [1,0,...]) = 1
+        let mut a = [0u8; 16]; a[0] = 1;
+        let mut b_arr = [0u8; 16]; b_arr[0] = 1;
+        let result = UltraHonkVerifier::field_dot_u32(&a, &b_arr);
+        assert_eq!(result, 1);
+    }
+
+    #[test]
+    fn test_g1_negate_is_involution() {
+        let env = Env::default();
+        // -(-P) = P (negation is its own inverse)
+        let g1 = BytesN::from_array(&env, &G1_GEN);
+        let neg1 = UltraHonkVerifier::g1_negate(&env, &g1).unwrap();
+        let neg2 = UltraHonkVerifier::g1_negate(&env, &neg1).unwrap();
+        assert_eq!(neg2.to_array(), G1_GEN);
+    }
+
+    #[test]
+    fn test_vk_governance_settlement_circuit() {
+        let env = Env::default();
+        let (client, admin) = setup(&env);
+        let new_vk = BytesN::from_array(&env, &[0x99u8; 128]);
+        let ver = client.update_vk(&admin, &CircuitType::PrivateSettlement, &new_vk);
+        assert_eq!(ver, 2);
+    }
+
+    #[test]
+    fn test_batch_all_invalid() {
+        let env = Env::default();
+        let (client, _) = setup(&env);
+        // All-zero proofs are all invalid
+        let bad = BytesN::from_array(&env, &[0u8; 256]);
+        let mut proofs: Vec<BytesN<256>> = Vec::new(&env);
+        proofs.push_back(bad.clone());
+        proofs.push_back(bad.clone());
+        proofs.push_back(bad);
+        let mut batch: Vec<Vec<BytesN<32>>> = Vec::new(&env);
+        batch.push_back(pis(&env, 4));
+        batch.push_back(pis(&env, 4));
+        batch.push_back(pis(&env, 4));
+        let count = client.batch_verify(&proofs, &batch, &CircuitType::ComplianceCredential);
+        assert_eq!(count, 0);
     }
 }

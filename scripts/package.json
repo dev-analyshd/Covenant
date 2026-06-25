@@ -7,6 +7,9 @@
     "hello": "tsx ./src/hello.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
+  "dependencies": {
+    "@stellar/stellar-sdk": "^16.0.1"
+  },
   "devDependencies": {
     "@types/node": "catalog:",
     "tsx": "catalog:"
