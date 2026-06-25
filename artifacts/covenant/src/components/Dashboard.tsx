@@ -5,8 +5,15 @@ import {
 } from "lucide-react";
 import { useCovenantStore } from "../lib/store";
 import {
-  COVENANT_PUBLIC, shortKey, explorerTx, explorerAccount
+  COVENANT_PUBLIC, shortKey, explorerTx, explorerAccount, explorerContract
 } from "../lib/stellar";
+
+const DEPLOYED_CONTRACTS = [
+  { label: "CovenantRegistry", id: "CBHH4GISNRX2NWE7OQA4CK26JPRTLI5QXSZVBE7MQJGLI5SYWUOY4H2S" },
+  { label: "CovenantSettlement", id: "CCBD23TQUGAD7YPVZCDVM6UKYVKXQYGPR3JWKVNFKRUWM2GNQEAG5ODA" },
+  { label: "UltraHonkVerifier", id: "CC66GX7NOKUVE7GBU56E5Z3BEOFEPNJ7VEN7DSB5ZS3NDCHDAFGUR257" },
+  { label: "ComplianceBridge", id: "CDXXIBLVGZWJ7BCPXC423RPWTVSE43KHIVYBMPVMPPOJFZFDI7VZRLBE" },
+];
 
 function StatCard({
   label, value, sub, icon, color, loading
@@ -174,6 +181,22 @@ export default function Dashboard() {
                   </span>
                 </div>
               )}
+              <div className="border-t pt-2 mt-1" style={{ borderColor: "var(--color-border-subtle)" }}>
+                <div className="label-sm mb-2" style={{ color: "#8b5cf6" }}>Deployed Contracts ✓</div>
+                {DEPLOYED_CONTRACTS.map((c) => (
+                  <div key={c.id} className="flex items-center justify-between gap-2 mb-1">
+                    <span className="text-xs" style={{ color: "var(--color-text-dim)" }}>{c.label}</span>
+                    <a
+                      href={explorerContract(c.id)}
+                      target="_blank" rel="noopener noreferrer"
+                      className="mono text-xs hover:underline flex items-center gap-1"
+                      style={{ color: "#a78bfa" }}
+                    >
+                      {c.id.slice(0, 6)}…{c.id.slice(-4)} <ExternalLink size={9} />
+                    </a>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>

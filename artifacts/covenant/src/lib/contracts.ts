@@ -164,10 +164,10 @@ async function buildSorobanTx(
   for (let i = 0; i < 20; i++) {
     await new Promise((r) => setTimeout(r, 3000));
     const txResult = await soroban.getTransaction(result.hash);
-    if (txResult.status === StellarRpc.GetTransactionStatus.SUCCESS) {
+    if (txResult.status === RpcApi.GetTransactionStatus.SUCCESS) {
       return result.hash;
     }
-    if (txResult.status === StellarRpc.GetTransactionStatus.FAILED) {
+    if (txResult.status === RpcApi.GetTransactionStatus.FAILED) {
       throw new Error(`Transaction failed on-chain`);
     }
   }
