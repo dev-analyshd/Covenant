@@ -1,6 +1,6 @@
 [package]
 name = "ultrahonk_verifier"
-version = "1.0.0"
+version = "2.0.0"
 edition = "2021"
 
 [lib]
@@ -14,7 +14,3 @@ soroban-sdk = { workspace = true, features = ["testutils"] }
 
 [features]
 testutils = ["soroban-sdk/testutils"]
-# Enable when Protocol 26 SDK (soroban-sdk ≥ 23.0) is available
-# Activates the full bn254_g1_mul + bn254_pairing_check verification path.
-# Build with: cargo build --release --features protocol26
-protocol26 = []
