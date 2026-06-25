@@ -422,9 +422,9 @@ export default function RegulatorPanel() {
               {contractIds ? (
                 <div className="space-y-2">
                   {[
-                    { label: "CovenantRegistry", id: contractIds.contracts?.covenant_registry || "Not deployed" },
-                    { label: "CovenantSettlement", id: contractIds.contracts?.covenant_settlement || "Not deployed" },
-                    { label: "UltraHonkVerifier", id: contractIds.contracts?.ultrahonk_verifier || "Not deployed" },
+                    { label: "CovenantRegistry", id: contractIds?.covenant_registry || "Not deployed" },
+                    { label: "CovenantSettlement", id: contractIds?.covenant_settlement || "Not deployed" },
+                    { label: "UltraHonkVerifier", id: contractIds?.ultrahonk_verifier || "Not deployed" },
                   ].map((c) => (
                     <div key={c.label} className="flex items-center justify-between gap-3 text-xs">
                       <span style={{ color: "var(--color-text-muted)" }}>{c.label}</span>

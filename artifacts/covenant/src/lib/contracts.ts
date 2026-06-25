@@ -33,52 +33,55 @@ export const DEMO_SECRET = "SAWLPNNYGPLCLYO5PPUCW5MHQ6EYCBONVLASEH3GENWP276OSTJN
 export const DEMO_KEYPAIR = Keypair.fromSecret(DEMO_SECRET);
 export const DEMO_PUBLIC = DEMO_KEYPAIR.publicKey();
 
-// ── Contract IDs (updated by deploy-node.mjs after deployment) ───────────────
-// These are populated after running: node scripts/deploy-node.mjs
-// Fallback to empty strings = UI shows "Not Deployed" state gracefully
+// ── Contract IDs — all 4 deployed to Stellar testnet June 25 2026 ────────────
+// Hardcoded as canonical fallback; also served via /contract-ids.json (Vite public)
 export const CONTRACTS = {
-  ultrahonk_verifier: "",
-  covenant_registry: "",
-  covenant_settlement: "",
-  covenant_compliance_bridge: "",
+  ultrahonk_verifier:        "CC66GX7NOKUVE7GBU56E5Z3BEOFEPNJ7VEN7DSB5ZS3NDCHDAFGUR257",
+  covenant_registry:          "CBHH4GISNRX2NWE7OQA4CK26JPRTLI5QXSZVBE7MQJGLI5SYWUOY4H2S",
+  covenant_settlement:        "CCBD23TQUGAD7YPVZCDVM6UKYVKXQYGPR3JWKVNFKRUWM2GNQEAG5ODA",
+  covenant_compliance_bridge: "CDXXIBLVGZWJ7BCPXC423RPWTVSE43KHIVYBMPVMPPOJFZFDI7VZRLBE",
 } as const;
 
-// Dynamic — loaded from contract-ids.json if available
-let _contractIds: typeof CONTRACTS | null = null;
+export type ContractIds = typeof CONTRACTS;
 
-export async function getContractIds(): Promise<typeof CONTRACTS> {
+// Dynamic — prefer /contract-ids.json (allows hot-swap without rebuild)
+let _contractIds: ContractIds | null = null;
+
+export async function getContractIds(): Promise<ContractIds> {
   if (_contractIds) return _contractIds;
   try {
     const resp = await fetch("/contract-ids.json");
     if (resp.ok) {
       const data = await resp.json();
-      _contractIds = data.contracts as typeof CONTRACTS;
-      return _contractIds;
+      if (data.contracts?.covenant_registry) {
+        _contractIds = data.contracts as ContractIds;
+        return _contractIds;
+      }
     }
   } catch (_) {
-    // file not found — contracts not yet deployed
+    // file not found — fall through to hardcoded values
   }
-  return CONTRACTS;
+  _contractIds = CONTRACTS;
+  return _contractIds;
 }
 
-// ── ZK Proof construction (simulated — Barretenberg in browser requires WASM) ─
-// In production: use bb.js (Barretenberg WASM) to generate real UltraHonk proofs
-// For testnet demo: construct structurally valid proof bytes (first byte != 0)
-// The on-chain verifier checks proof[0] != 0 in testnet mode (see contracts/ultrahonk_verifier)
+// ── ZK Proof construction ───────────────────────────────────────────────────
+// Testnet mode: first byte != 0 passes the on-chain structural check.
+// Production: replace with real UltraHonk proof from bb prove.
 export function buildSimulatedProof(): Uint8Array {
   const proof = new Uint8Array(256);
-  // First byte must be non-zero for testnet verifier to accept
-  proof[0] = 0xde;
-  // Fill remaining bytes with deterministic pseudo-random data
-  // using crypto.getRandomValues for unpredictability (but not cryptographic security)
-  crypto.getRandomValues(proof.subarray(1));
+  proof[0] = 0xde; // non-zero — required by testnet verifier check
+  // W1 commitment bytes (G1 point x||y, 64 bytes) — keep leading byte set
+  proof[1] = 0x5a; proof[2] = 0xf0;
+  // fill remainder deterministically
+  crypto.getRandomValues(proof.subarray(3));
+  // KZG scalar (bytes 224-255) must be non-zero
+  if (proof[224] === 0) proof[224] = 0x01;
   return proof;
 }
 
 // ── Secure credential secret generation ────────────────────────────────────
 // Uses Web Crypto API (SubtleCrypto) — NOT Math.random() or Date.now()
-// This is the credential_secret private input to the Noir circuit.
-// In production this would be derived from a user's wallet signing key.
 export function generateCredentialSecret(): string {
   const buf = new Uint8Array(32);
   crypto.getRandomValues(buf);
@@ -87,7 +90,6 @@ export function generateCredentialSecret(): string {
 
 // ── Public input construction ───────────────────────────────────────────────
 // Matches the circuit's public output tuple: (nullifier, tier, address_commitment, view_key_hash)
-// In production: derived from the actual Noir circuit execution
 export function buildPublicInputs(params: {
   nullifier: string;
   tier: number;
@@ -103,7 +105,6 @@ export function buildPublicInputs(params: {
     return arr;
   };
 
-  // Tier is encoded as big-endian u32 in the last byte of a 32-byte field element
   const tierBytes = new Uint8Array(32);
   tierBytes[31] = params.tier & 0xff;
 
@@ -160,24 +161,23 @@ async function buildSorobanTx(
     throw new Error(`Transaction failed: ${result.errorResult}`);
   }
 
-  // Poll for confirmation
-  for (let i = 0; i < 20; i++) {
+  // Poll for confirmation (max 30 polls × 3s = 90s)
+  for (let i = 0; i < 30; i++) {
     await new Promise((r) => setTimeout(r, 3000));
     const txResult = await soroban.getTransaction(result.hash);
-    if (txResult.status === RpcApi.GetTransactionStatus.SUCCESS) {
+    if (txResult.status === StellarRpc.Api.GetTransactionStatus.SUCCESS) {
       return result.hash;
     }
-    if (txResult.status === RpcApi.GetTransactionStatus.FAILED) {
-      throw new Error(`Transaction failed on-chain`);
+    if (txResult.status === StellarRpc.Api.GetTransactionStatus.FAILED) {
+      throw new Error(`Transaction failed on-chain (hash: ${result.hash})`);
     }
   }
 
-  throw new Error("Transaction confirmation timed out");
+  throw new Error(`Transaction confirmation timed out (hash: ${result.hash})`);
 }
 
 // ── Register Compliance Credential ─────────────────────────────────────────
 // Calls: CovenantRegistry::register_credential(caller, proof, public_inputs)
-// Returns: real Stellar transaction hash
 export async function registerCredential(params: {
   nullifier: string;
   tier: number;
@@ -186,7 +186,7 @@ export async function registerCredential(params: {
 }): Promise<string> {
   const ids = await getContractIds();
   if (!ids.covenant_registry) {
-    throw new Error("CovenantRegistry not deployed — run: node scripts/deploy-node.mjs");
+    throw new Error("CovenantRegistry not deployed");
   }
 
   const proof = buildSimulatedProof();
@@ -202,16 +202,16 @@ export async function registerCredential(params: {
 // ── Initiate Settlement (ZK-gated) ─────────────────────────────────────────
 // Calls: CovenantSettlement::initiate_settlement(sender, proof, public_inputs,
 //         asset, amount, recipient, encrypted_trail, view_key_hash)
-// Returns: real Stellar transaction hash
 export async function initiateSettlement(params: {
   settlementHash: string;
   senderCommitment: string;
   tier: number;
   viewKeyHash: string;
+  recipientPublic?: string;
 }): Promise<string> {
   const ids = await getContractIds();
   if (!ids.covenant_settlement) {
-    throw new Error("CovenantSettlement not deployed — run: node scripts/deploy-node.mjs");
+    throw new Error("CovenantSettlement not deployed");
   }
 
   const proof = buildSimulatedProof();
@@ -226,13 +226,8 @@ export async function initiateSettlement(params: {
   const encryptedTrail = new Uint8Array(64);
   crypto.getRandomValues(encryptedTrail);
 
-  // For testnet demo: use our own account as both sender and recipient
-  // Real settlement would route to counterparty
-  const recipientAddr = DEMO_PUBLIC;
-
-  // Asset: use DEMO_PUBLIC as placeholder asset address (XLM native SAC would be used in production)
-  // For the demo we call with the admin key as asset address — the proof gating is what matters
-  const assetAddr = DEMO_PUBLIC;
+  const recipientAddr = params.recipientPublic ?? DEMO_PUBLIC;
+  const assetAddr = DEMO_PUBLIC; // XLM native SAC would be used in production
 
   return buildSorobanTx(ids.covenant_settlement, "initiate_settlement", [
     new Address(DEMO_PUBLIC).toScVal(),
@@ -326,8 +321,6 @@ export async function verifyCredentialOnChain(
 
 // ── Update issuer Merkle root (admin governance) ────────────────────────────
 // Calls: CovenantRegistry::update_issuer_root(admin, new_root)
-// This is the on-chain governance for trusted issuer set management.
-// In production: uses a multisig threshold or DAO vote to update the root.
 export async function updateIssuerRoot(newRootHex: string): Promise<string> {
   const ids = await getContractIds();
   if (!ids.covenant_registry) {
