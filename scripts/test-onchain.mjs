@@ -251,9 +251,9 @@ async function section2() {
     log(11, "PASS", "Payment: 0.001 XLM self-transfer", `hash=${res.hash.slice(0,16)}…`);
   } catch(e) { log(11, "FAIL", "Payment: self-transfer", e.message.slice(0,80)); }
 
-  // 12: Payment with ZK settlement hash memo
+  // 12: Payment with ZK settlement hash memo (max 28 bytes: "cov:" + 24 hex chars = 28)
   try {
-    const settlementHash = randHex(14);
+    const settlementHash = randHex(12); // 24 hex chars; "cov:" + 24 = 28 bytes = limit
     const account = await horizon.loadAccount(PUBLIC);
     const tx = new TransactionBuilder(account, { fee: BASE_FEE, networkPassphrase: NETWORK })
       .addOperation(Operation.payment({ destination: PUBLIC, asset: Asset.native(), amount: "0.001" }))
@@ -906,22 +906,37 @@ async function section8() {
       `rs=10→tier${high.witness?.tier} rs=85→tier${low.witness?.tier}`);
   } catch(e) { log(78, "FAIL", "Credential: tier ordering", e.message.slice(0,80)); }
 
-  // 79: SAR export endpoint
+  // 79: SAR export endpoint (POST with settlement data)
   try {
-    const res = await apiGet("/export/sar?format=json");
-    log(79, res ? "PASS" : "SKIP", "API: /export/sar endpoint",
-      typeof res === "object" ? "json ok" : "ok");
+    const res = await apiPost("/export/sar", {
+      settlementId: "test-" + randHex(8),
+      amount: "50000",
+      asset: "XLM",
+      timestamp: new Date().toISOString(),
+      kycProvider: "Onfido",
+      sanctionsStatus: "CLEAR",
+      jurisdiction: "US",
+      senderCommitment: randHex(32),
+      viewKeyHash: randHex(32),
+    });
+    log(79, res?.sarId || res?.json ? "PASS" : "SKIP",
+      "API: /export/sar (POST)",
+      res?.sarId ? `sarId=${res.sarId}` : "json ok");
   } catch(e) { log(79, "SKIP", "API: /export/sar", e.message.slice(0,60)); }
 
-  // 80: ASP deposit API
+  // 80: ASP deposit with correct payload
   try {
+    const proveRes = await apiPost("/prove/credential", provePayload(35));
     const res = await apiPost("/asp/deposit", {
-      amount: 5000,
-      depositorId: "test-" + randHex(4),
-      proof: buildSimulatedProof().toString("hex"),
+      asset: "XLM",
+      usdAmount: 500,
+      nullifier: proveRes.witness.nullifier,
+      complianceTier: proveRes.witness.tier,
+      proofHash: proveRes.proof.slice(0, 64),
+      vasp: "TestVASP",
     });
-    log(80, res ? "PASS" : "SKIP",
-      "API: /asp/deposit", `ok=${JSON.stringify(res).slice(0,40)}`);
+    log(80, res?.success ? "PASS" : "SKIP",
+      "API: /asp/deposit", `depositId=${res?.depositId ?? "?"}`);
   } catch(e) { log(80, "SKIP", "API: /asp/deposit", e.message.slice(0,60)); }
 }
 
