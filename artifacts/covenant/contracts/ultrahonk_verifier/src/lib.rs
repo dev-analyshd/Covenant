@@ -155,10 +155,8 @@ impl UltraHonkProof {
         if kzg_eval == [0u8; 32] {
             return Err(VerifierError::InvalidProof);
         }
-        // Sumcheck target must be < BN254 scalar prime (first byte check)
-        if sumcheck[0] > BN254_FR[0] {
-            return Err(VerifierError::InvalidProof);
-        }
+        // Sumcheck target: any 32-byte value is valid at parse time;
+        // content is checked against the transcript-bound SHA-256 in ultrahonk_verify.
         Ok(Self { w1, w2, w3, sumcheck, kzg_eval })
     }
 }
@@ -360,26 +358,24 @@ impl UltraHonkVerifier {
         let beta  = &transcript[0..16];
         let gamma = &transcript[16..32];
 
-        // ── Step 2: Sumcheck Verification (Enhanced) ─────────────────────────
-        // Round 0 claim: p_0(0) + p_0(1) = sigma (sumcheck_target)
-        //   p_0(0) = dot(W1_x[:16], beta)  via β challenge
-        //   p_0(1) = dot(W2_x[:16], gamma) via γ challenge
-        //   p_0(contrib) += dot(W3_x[:16], pi0[:16])
+        // ── Step 2: Full 32-byte Sumcheck Binding Check ──────────────────────
+        // expected_sumcheck = SHA256(W1_x ‖ W2_x ‖ W3_x ‖ pi0 ‖ pi1)
         //
-        // We verify: low 16-bit word of the claim matches sumcheck_target
-        // (Full production: 32-byte field arithmetic mod BN254 scalar prime)
-        let w1_beta   = Self::field_dot_u32(&p.w1[..16], beta);
-        let w2_gamma  = Self::field_dot_u32(&p.w2[..16], gamma);
-        let w3_pi0    = Self::field_dot_u32(&p.w3[..16], &pi0[0..16]);
-        let sumcheck_claim = w1_beta
-            .wrapping_add(w2_gamma)
-            .wrapping_add(w3_pi0);
-
-        // Enhanced check: verify low 16 bits (2 bytes) of sumcheck target
-        // Allow bypass if sumcheck_target low word is 0x0000 (testnet proofs)
-        let expected_low16 = u16::from_be_bytes([p.sumcheck[30], p.sumcheck[31]]);
-        let got_low16      = (sumcheck_claim & 0xffff) as u16;
-        if expected_low16 != 0 && got_low16 != expected_low16 {
+        // The proof builder (API server) computes the same hash from the wire
+        // commitments (W1, W2, W3) and the first two public inputs (pi0, pi1)
+        // and stores the result as sumcheck_target in the proof.
+        //
+        // All 32 bytes must match — no bypass, no special-case zero path.
+        // This replaces the previous 2-byte low-word check with a full
+        // transcript-binding commitment.
+        let mut sc_preimage = Bytes::new(env);
+        for b in p.w1[..32].iter() { sc_preimage.push_back(*b); }  // W1_x
+        for b in p.w2[..32].iter() { sc_preimage.push_back(*b); }  // W2_x
+        for b in p.w3[..32].iter() { sc_preimage.push_back(*b); }  // W3_x
+        for b in pi0.iter()        { sc_preimage.push_back(*b); }   // pi0
+        for b in pi1.iter()        { sc_preimage.push_back(*b); }   // pi1
+        let expected_sumcheck: [u8; 32] = env.crypto().sha256(&sc_preimage).into();
+        if p.sumcheck != expected_sumcheck {
             return Err(VerifierError::SumcheckFailed);
         }
 
@@ -520,27 +516,35 @@ mod test {
 
     /// Create a structurally valid UltraHonk proof that satisfies the
     /// structural binding check (testnet mode — no Protocol 26 required).
-    fn valid_proof(env: &Env) -> BytesN<256> {
+    // Build a proof with correct 32-byte SHA-256 sumcheck_target for the given tier.
+    // sumcheck_target = SHA256(W1_x ‖ W2_x ‖ W3_x ‖ pi0 ‖ pi1)
+    // where pi0 = [0xAA; 32] (nullifier) and pi1 = [0u8; 31] ++ [tier]
+    fn valid_proof(env: &Env, tier: u8) -> BytesN<256> {
         let mut b = [0u8; 256];
-        // W1 commitment: non-trivial x-coordinate, non-trivially related to W2
+        // W1 commitment
         b[0] = 0x1e; b[1] = 0x5a; b[2] = 0xf0;
-        for i in 3..32 { b[i] = (i as u8).wrapping_mul(7); }
-        // W1 Y
+        for i in 3..32  { b[i] = (i as u8).wrapping_mul(7); }
         for i in 32..64 { b[i] = (i as u8) ^ 0xab; }
-        // W2 commitment (different from W1 so cross-binding check passes)
-        b[64] = 0x2f; for i in 65..96 { b[i] = (i as u8).wrapping_mul(3); }
+        // W2 commitment
+        b[64] = 0x2f; for i in 65..96  { b[i] = (i as u8).wrapping_mul(3); }
         for i in 96..128 { b[i] = (i as u8) ^ 0xcd; }
         // W3 commitment
         b[128] = 0x3c; for i in 129..160 { b[i] = (i as u8).wrapping_mul(5); }
         for i in 160..192 { b[i] = (i as u8) ^ 0xef; }
-        // Sumcheck target: must be < BN254_FR (first byte 0x29 < 0x30)
-        b[192] = 0x29;
-        for i in 193..223 { b[i] = (i as u8) & 0x7f; }
-        // sumcheck[30..31] = 0x0000 → verifier skips 2-byte sumcheck check
-        b[222] = 0x00; b[223] = 0x00;
-        // KZG eval: non-zero, W1 x-coord non-trivially set above
-        b[224] = 0x1e ^ b[0]; b[225] = 0x5a;
+        // KZG eval: non-zero
+        b[224] = 0x1e; b[225] = 0x5a;
         for i in 226..256 { b[i] = (i as u8) | 0x01; }
+        // Compute sumcheck_target = SHA256(W1_x ‖ W2_x ‖ W3_x ‖ pi0 ‖ pi1)
+        let pi0_arr = [0xAAu8; 32];
+        let mut pi1_arr = [0u8; 32]; pi1_arr[31] = tier;
+        let mut sc_msg = Bytes::new(env);
+        for x in b[..32].iter()    { sc_msg.push_back(*x); }  // W1_x
+        for x in b[64..96].iter()  { sc_msg.push_back(*x); }  // W2_x
+        for x in b[128..160].iter(){ sc_msg.push_back(*x); }  // W3_x
+        for x in pi0_arr.iter()    { sc_msg.push_back(*x); }  // pi0
+        for x in pi1_arr.iter()    { sc_msg.push_back(*x); }  // pi1
+        let sumcheck: [u8; 32] = env.crypto().sha256(&sc_msg).into();
+        b[192..224].copy_from_slice(&sumcheck);
         BytesN::from_array(env, &b)
     }
 
@@ -571,7 +575,7 @@ mod test {
     fn test_verify_valid_proof() {
         let env = Env::default();
         let (client, _) = setup(&env);
-        let proof = valid_proof(&env);
+        let proof = valid_proof(&env, 4);
         let result = client.verify_compliance_proof(&proof, &pis(&env, 4));
         assert!(result.valid);
         assert!(matches!(result.circuit, CircuitType::ComplianceCredential));
@@ -602,7 +606,7 @@ mod test {
     fn test_settlement_proof() {
         let env = Env::default();
         let (client, _) = setup(&env);
-        let proof = valid_proof(&env);
+        let proof = valid_proof(&env, 3);
         let result = client.verify_settlement_proof(&proof, &pis(&env, 3));
         assert!(result.valid);
         assert!(matches!(result.circuit, CircuitType::PrivateSettlement));
@@ -622,7 +626,7 @@ mod test {
     fn test_batch_verify() {
         let env = Env::default();
         let (client, _) = setup(&env);
-        let proof = valid_proof(&env);
+        let proof = valid_proof(&env, 4);
 
         let mut proofs: Vec<BytesN<256>> = Vec::new(&env);
         proofs.push_back(proof.clone());
@@ -641,7 +645,7 @@ mod test {
     fn test_batch_verify_mixed() {
         let env = Env::default();
         let (client, _) = setup(&env);
-        let good = valid_proof(&env);
+        let good = valid_proof(&env, 4);
         let bad = BytesN::from_array(&env, &[0u8; 256]); // zero W1 = invalid
 
         let mut proofs: Vec<BytesN<256>> = Vec::new(&env);
@@ -737,7 +741,7 @@ mod test {
     fn test_batch_size_mismatch_fails() {
         let env = Env::default();
         let (client, _) = setup(&env);
-        let proof = valid_proof(&env);
+        let proof = valid_proof(&env, 4);
         let mut proofs: Vec<BytesN<256>> = Vec::new(&env);
         proofs.push_back(proof.clone());
         proofs.push_back(proof);
@@ -753,25 +757,28 @@ mod test {
     }
 
     #[test]
-    fn test_sumcheck_overflow_rejected() {
+    fn test_sumcheck_wrong_content_rejected() {
+        // A proof whose sumcheck_target does not match SHA256(W1_x‖W2_x‖W3_x‖pi0‖pi1)
+        // must be rejected with SumcheckFailed, regardless of range.
         let env = Env::default();
         let (client, _) = setup(&env);
         let mut b = [0u8; 256];
-        b[0] = 0x1e;             // non-zero W1_x
-        b[64] = 0x2f;            // non-zero W2_x (different from W1)
-        b[128] = 0x3c;           // non-zero W3_x
-        b[192] = 0x31;           // sumcheck[0] = 0x31 > BN254_FR[0] (0x30) → overflow!
-        b[224] = 0xab;           // non-zero kzg_eval
+        b[0] = 0x1e;   // non-zero W1_x
+        b[64] = 0x2f;  // non-zero W2_x
+        b[128] = 0x3c; // non-zero W3_x
+        b[224] = 0xab; // non-zero kzg_eval
+        // sumcheck_target = all zeros (will not match SHA256 of the above wire points)
+        // b[192..224] stays as [0u8; 32] (the default)
         let bad_proof = BytesN::from_array(&env, &b);
         let err = client.try_verify_compliance_proof(&bad_proof, &pis(&env, 4));
-        assert!(err.is_err()); // InvalidProof (sumcheck out of field)
+        assert!(err.is_err()); // SumcheckFailed (wrong 32-byte transcript binding)
     }
 
     #[test]
     fn test_compliance_proof_needs_4_inputs() {
         let env = Env::default();
         let (client, _) = setup(&env);
-        let proof = valid_proof(&env);
+        let proof = valid_proof(&env, 4);
         let mut short_pis: Vec<BytesN<32>> = Vec::new(&env);
         short_pis.push_back(BytesN::from_array(&env, &[0xAAu8; 32]));
         short_pis.push_back(BytesN::from_array(&env, &[0x00u8; 32]));
@@ -785,7 +792,7 @@ mod test {
     fn test_settlement_proof_needs_4_inputs() {
         let env = Env::default();
         let (client, _) = setup(&env);
-        let proof = valid_proof(&env);
+        let proof = valid_proof(&env, 4);
         let mut short_pis: Vec<BytesN<32>> = Vec::new(&env);
         short_pis.push_back(BytesN::from_array(&env, &[0xAAu8; 32]));
         let err = client.try_verify_settlement_proof(&proof, &short_pis);
@@ -796,7 +803,7 @@ mod test {
     fn test_verify_tier1_proof() {
         let env = Env::default();
         let (client, _) = setup(&env);
-        let proof = valid_proof(&env);
+        let proof = valid_proof(&env, 1);
         let result = client.verify_compliance_proof(&proof, &pis(&env, 1));
         assert!(result.valid);
     }
@@ -805,7 +812,7 @@ mod test {
     fn test_verify_tier5_proof() {
         let env = Env::default();
         let (client, _) = setup(&env);
-        let proof = valid_proof(&env);
+        let proof = valid_proof(&env, 5);
         let result = client.verify_compliance_proof(&proof, &pis(&env, 5));
         assert!(result.valid);
     }
@@ -824,7 +831,7 @@ mod test {
     fn test_batch_verify_settlement_circuit() {
         let env = Env::default();
         let (client, _) = setup(&env);
-        let proof = valid_proof(&env);
+        let proof = valid_proof(&env, 3);
         let mut proofs: Vec<BytesN<256>> = Vec::new(&env);
         proofs.push_back(proof);
         let mut batch: Vec<Vec<BytesN<32>>> = Vec::new(&env);
@@ -837,7 +844,7 @@ mod test {
     fn test_proof_hash_deterministic() {
         let env = Env::default();
         let (client, _) = setup(&env);
-        let proof = valid_proof(&env);
+        let proof = valid_proof(&env, 4);
         let r1 = client.verify_compliance_proof(&proof, &pis(&env, 4));
         let r2 = client.verify_compliance_proof(&proof, &pis(&env, 4));
         assert_eq!(r1.proof_hash, r2.proof_hash);

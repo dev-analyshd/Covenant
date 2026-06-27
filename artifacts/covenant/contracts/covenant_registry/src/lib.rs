@@ -525,8 +525,7 @@ impl CovenantRegistry {
         let kzg_eval: &[u8] = &arr[224..256];
         if *kzg_eval == [0u8; 32] { return false; }
 
-        // Sumcheck first byte must be ≤ BN254_FR[0] (0x30) — field range check
-        if arr[192] > BN254_FR[0] { return false; }
+        // Sumcheck content is checked against SHA-256 transcript binding below.
 
         // ── Fiat-Shamir transcript binding ─────────────────────────────────────
         let pi0 = public_inputs.get(0).unwrap().to_array();
@@ -540,11 +539,21 @@ impl CovenantRegistry {
         for b in arr[128..160].iter() { transcript_msg.push_back(*b); }
         let _transcript: [u8; 32] = env.crypto().sha256(&transcript_msg).into();
 
-        // ── Sumcheck bypass check ─────────────────────────────────────────────
-        // If sumcheck low-word [30..32] = 0x0000, sumcheck is bypassed.
-        // (Testnet proofs always set this to 0.)
-        let sc_low16 = u16::from_be_bytes([arr[222], arr[223]]);
-        // (If sc_low16 != 0, full sumcheck would be computed here)
+        // ── Full 32-byte Sumcheck Binding Check ──────────────────────────────
+        // expected = SHA256(W1_x ‖ W2_x ‖ W3_x ‖ pi0 ‖ pi1)
+        // The API server proof builder sets sumcheck_target to this same hash.
+        // All 32 bytes must match — no bypass, no special-case zero path.
+        let mut sc_preimage = Bytes::new(env);
+        for b in arr[0..32].iter()    { sc_preimage.push_back(*b); }  // W1_x
+        for b in arr[64..96].iter()   { sc_preimage.push_back(*b); }  // W2_x
+        for b in arr[128..160].iter() { sc_preimage.push_back(*b); }  // W3_x
+        for b in pi0.iter()           { sc_preimage.push_back(*b); }  // pi0
+        for b in pi1.iter()           { sc_preimage.push_back(*b); }  // pi1
+        let expected_sc: [u8; 32] = env.crypto().sha256(&sc_preimage).into();
+        let proof_sc = &arr[192..224];
+        if proof_sc != expected_sc.as_slice() {
+            return false; // SumcheckFailed
+        }
 
         // ── BN254 KZG Pairing Check ──────────────────────────────────────────
         // e(W1, VK_G₂) · e(-kzg_eval·G₁, G₂) = 1_GT
@@ -609,34 +618,43 @@ mod test {
     use super::*;
     use soroban_sdk::testutils::Address as _;
 
-    // Build a structurally valid proof (bypasses BN254 pairing via sumcheck[30..32]=0).
-    // In a live Protocol 26 environment, W1 would be a real G1 point with W1=kzg_eval·G1.
+    // Build a proof with correct SHA-256 sumcheck_target for tier=4.
+    // sumcheck_target = SHA256(W1_x ‖ W2_x ‖ W3_x ‖ pi0 ‖ pi1)
     fn valid_proof(env: &Env) -> (BytesN<256>, Vec<BytesN<32>>) {
         let mut arr = [0u8; 256];
-        // W1: real-looking G1 point with non-zero first byte
+        // W1
         arr[0] = 0x1e; arr[1] = 0x5a; arr[2] = 0xf0;
-        for i in 3..32 { arr[i] = (i as u8).wrapping_mul(7); }
+        for i in 3..32  { arr[i] = (i as u8).wrapping_mul(7); }
         for i in 32..64 { arr[i] = (i as u8) ^ 0xab; }
-        // W2: different from W1
-        arr[64] = 0x2f; for i in 65..96 { arr[i] = (i as u8).wrapping_mul(3); }
+        // W2
+        arr[64] = 0x2f; for i in 65..96  { arr[i] = (i as u8).wrapping_mul(3); }
         for i in 96..128 { arr[i] = (i as u8) ^ 0xcd; }
         // W3
         arr[128] = 0x0a; for i in 129..192 { arr[i] = (i as u8) ^ 0xef; }
-        // Sumcheck: first byte 0x29 < 0x30 (in Fr), low16 = 0x0000 (bypass)
-        arr[192] = 0x29;
-        for i in 193..222 { arr[i] = (i as u8) & 0x7f; }
-        arr[222] = 0x00; arr[223] = 0x00;
         // KZG eval: non-zero
         arr[224] = 0xde;
         for i in 225..256 { arr[i] = (i as u8) | 0x01; }
-        let proof = BytesN::from_array(env, &arr);
 
+        // Public inputs for tier=4
+        let pi0_arr = [0xAAu8; 32];
+        let mut pi1_arr = [0u8; 32]; pi1_arr[31] = 4;
+
+        // Compute sumcheck_target = SHA256(W1_x ‖ W2_x ‖ W3_x ‖ pi0 ‖ pi1)
+        let mut sc_msg = Bytes::new(env);
+        for b in arr[..32].iter()    { sc_msg.push_back(*b); }  // W1_x
+        for b in arr[64..96].iter()  { sc_msg.push_back(*b); }  // W2_x
+        for b in arr[128..160].iter(){ sc_msg.push_back(*b); }  // W3_x
+        for b in pi0_arr.iter()      { sc_msg.push_back(*b); }  // pi0
+        for b in pi1_arr.iter()      { sc_msg.push_back(*b); }  // pi1
+        let sumcheck: [u8; 32] = env.crypto().sha256(&sc_msg).into();
+        arr[192..224].copy_from_slice(&sumcheck);
+
+        let proof = BytesN::from_array(env, &arr);
         let mut pis: Vec<BytesN<32>> = Vec::new(env);
-        pis.push_back(BytesN::from_array(env, &[0xAAu8; 32])); // nullifier
-        let mut tier_arr = [0u8; 32]; tier_arr[31] = 4;
-        pis.push_back(BytesN::from_array(env, &tier_arr));       // tier=4
-        pis.push_back(BytesN::from_array(env, &[0xBBu8; 32]));   // address_commitment
-        pis.push_back(BytesN::from_array(env, &[0xCCu8; 32]));   // view_key_hash
+        pis.push_back(BytesN::from_array(env, &pi0_arr));
+        pis.push_back(BytesN::from_array(env, &pi1_arr));
+        pis.push_back(BytesN::from_array(env, &[0xBBu8; 32]));
+        pis.push_back(BytesN::from_array(env, &[0xCCu8; 32]));
         (proof, pis)
     }
 
@@ -892,14 +910,16 @@ mod test {
     }
 
     #[test]
-    fn test_sumcheck_overflow_rejected_in_registration() {
+    fn test_sumcheck_wrong_content_rejected_in_registration() {
+        // A proof whose sumcheck_target does not match SHA256(W1_x‖W2_x‖W3_x‖pi0‖pi1)
+        // must be rejected when registering a credential.
         let env = Env::default();
         let (client, _) = setup(&env);
         let caller = Address::generate(&env);
         let mut arr = [0u8; 256];
         arr[0] = 0x1e; // non-zero W1
-        arr[192] = 0x31; // sumcheck[0] = 0x31 > 0x30 → overflow!
         arr[224] = 0xab; // non-zero kzg_eval
+        // arr[192..224] = [0u8; 32] — wrong sumcheck (not SHA-256 of wire points)
         let bad_proof = BytesN::from_array(&env, &arr);
         let mut pis: Vec<BytesN<32>> = Vec::new(&env);
         pis.push_back(BytesN::from_array(&env, &[0xAAu8; 32]));
@@ -908,7 +928,7 @@ mod test {
         pis.push_back(BytesN::from_array(&env, &[0xBBu8; 32]));
         pis.push_back(BytesN::from_array(&env, &[0xCCu8; 32]));
         let err = client.try_register_credential(&caller, &bad_proof, &pis);
-        assert!(err.is_err());
+        assert!(err.is_err()); // SumcheckFailed (wrong 32-byte transcript binding)
     }
 
     #[test]
@@ -931,14 +951,24 @@ mod test {
         for i in 65..128 { arr2[i] = (i as u8) ^ 0x33; }
         arr2[128] = 0x3c;
         for i in 129..192 { arr2[i] = (i as u8) | 0x01; }
-        arr2[192] = 0x28; arr2[222] = 0x00; arr2[223] = 0x00;
+        // Compute sumcheck_target for proof2's wire points and pi values
+        // pi0 = [0xDD; 32], pi1 = [0; 31] ++ [3]
+        let pi0_2 = [0xDDu8; 32];
+        let mut pi1_2 = [0u8; 32]; pi1_2[31] = 3;
+        let mut sc2_msg = Bytes::new(&env);
+        for b in arr2[..32].iter()    { sc2_msg.push_back(*b); }
+        for b in arr2[64..96].iter()  { sc2_msg.push_back(*b); }
+        for b in arr2[128..160].iter(){ sc2_msg.push_back(*b); }
+        for b in pi0_2.iter()         { sc2_msg.push_back(*b); }
+        for b in pi1_2.iter()         { sc2_msg.push_back(*b); }
+        let sc2: [u8; 32] = env.crypto().sha256(&sc2_msg).into();
+        arr2[192..224].copy_from_slice(&sc2);
         arr2[224] = 0xef;
         for i in 225..256 { arr2[i] = (i as u8) | 0x03; }
         let proof2 = BytesN::from_array(&env, &arr2);
         let mut pis2: Vec<BytesN<32>> = Vec::new(&env);
-        pis2.push_back(BytesN::from_array(&env, &[0xDDu8; 32])); // different nullifier
-        let mut tier_arr2 = [0u8; 32]; tier_arr2[31] = 3;
-        pis2.push_back(BytesN::from_array(&env, &tier_arr2));
+        pis2.push_back(BytesN::from_array(&env, &pi0_2));
+        pis2.push_back(BytesN::from_array(&env, &pi1_2));
         pis2.push_back(BytesN::from_array(&env, &[0xEEu8; 32]));
         pis2.push_back(BytesN::from_array(&env, &[0xFFu8; 32]));
 

@@ -2,3 +2,4 @@
 - [React warning investigation](react-warning.md) — "Functions not valid as React child" warning persists in Replit preview regardless of code changes; appears to be from Replit's proxy/dev infrastructure, not app code.
 - [Covenant workflow startup](covenant-workflow.md) — workflow command must include PORT and BASE_PATH env vars inline: `PORT=5000 BASE_PATH=/ API_PORT=3000 pnpm --filter @workspace/covenant run dev`
 - [Covenant proof flow](covenant-proof-flow.md) — Real BN254 proof bytes now flow end-to-end; registerCredential and initiateSettlement both accept proofHex param; SettlementPanel calls both sendPayment AND initiateSettlement.
+- [Covenant ZK corrections](covenant-zk-corrections.md) — Three technical gaps corrected June 27 2026: real Poseidon2 BN254, full sumcheck binding, Rust contract unit tests updated.

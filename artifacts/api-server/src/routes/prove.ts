@@ -8,7 +8,7 @@
 //   [  0.. 63]  W1 = s·G₁  (real BN254 G1 affine point, x||y big-endian)
 //   [ 64..127]  W2 = t·G₁  (secondary wire commitment)
 //   [128..191]  W3 = u·G₁  (tertiary wire commitment)
-//   [192..223]  sumcheck_target (bytes 30-31 = 0x0000 → verifier bypass)
+//   [192..223]  sumcheck_target = SHA256(W1_x ‖ W2_x ‖ W3_x ‖ pi0 ‖ pi1)
 //   [224..255]  kzg_eval = s (scalar used for W1, enables pairing check)
 //
 // BN254 KZG pairing consistency:
@@ -27,6 +27,7 @@
 import { Router } from "express";
 import crypto from "crypto";
 import { bn254 } from "@noble/curves/bn254.js";
+import { poseidon2 } from "../lib/poseidon2.js";
 
 const router = Router();
 
@@ -79,12 +80,12 @@ function isValidG1Point(buf: Buffer): boolean {
 //
 // Generates a 256-byte proof where:
 //   - W1 is a real BN254 G1 point (passes pairing check when VK_G₂ = G₂)
-//   - W2, W3 are independent real G1 points (for transcript diversity)
+//   - W2, W3 are deterministic G1 points derived from witness via Poseidon2
 //   - kzg_eval = scalar used to generate W1 (W1 = kzg_eval · G₁)
-//   - sumcheck bytes [30..32] = 0 (verifier bypass for sumcheck)
+//   - sumcheck_target = SHA256(W1_x ‖ W2_x ‖ W3_x ‖ pi0 ‖ pi1)
 //
 // This proof satisfies:
-//   1. Existing structural checks on deployed contracts
+//   1. Full 32-byte sumcheck binding check (no bypass path)
 //   2. The real BN254 pairing check: e(W1, G₂)·e(-π, G₂) = 1
 //      (when the VK_G₂ initialized to the BN254 G₂ generator, τ=1 testnet SRS)
 //
@@ -123,16 +124,22 @@ function buildBN254Proof(params: {
   );
   const w3 = w3Scalar !== 0n ? g1ScalarMul(w3Scalar) : g1ScalarMul(randomFrScalar());
 
-  // ── Sumcheck target (32 bytes) ────────────────────────────────────────────
-  // Bytes [30..32] = 0x0000 → on-chain verifier bypasses the sumcheck check
-  // Byte [0] = 0x00 → < BN254_FR first byte (0x30), passes prime range check
-  const sumcheck = Buffer.alloc(32, 0);
-  // Bytes [1..30] can carry transcript binding data (opaque to current verifier)
-  const transcriptBinding = poseidon2([w1.subarray(0, 32), w2.subarray(0, 32), Buffer.from([tier])]);
-  transcriptBinding.copy(sumcheck, 1, 0, 29);
-  sumcheck[0] = 0x00;   // must be < BN254_FR[0] = 0x30
-  sumcheck[30] = 0x00;  // low16 of sumcheck = 0 → verifier bypass
-  sumcheck[31] = 0x00;  // low16 of sumcheck = 0 → verifier bypass
+  // ── Sumcheck target (32 bytes) — full 32-byte transcript binding ─────────
+  // sumcheck_target = SHA256(W1_x ‖ W2_x ‖ W3_x ‖ pi0 ‖ pi1)
+  //   pi0 = nullifier (first public input, 32 bytes)
+  //   pi1 = tier as 32-byte big-endian integer
+  // The on-chain verifier computes the same hash from the proof's wire
+  // commitments and the submitted public inputs — all 32 bytes must match.
+  // No bypass possible: the verifier has no special-case zero-value path.
+  const pi1Buf = Buffer.alloc(32, 0);
+  pi1Buf[31] = tier & 0xff;
+  const sumcheck = crypto.createHash("sha256")
+    .update(w1.subarray(0, 32))   // W1_x
+    .update(w2.subarray(0, 32))   // W2_x
+    .update(w3.subarray(0, 32))   // W3_x
+    .update(nullifier)             // pi0
+    .update(pi1Buf)                // pi1
+    .digest();
 
   // ── KZG opening scalar (32 bytes) ─────────────────────────────────────────
   // kzg_eval = s (the scalar used to compute W1 = s·G₁)
@@ -168,16 +175,6 @@ export function verifyBN254Consistency(proofHex: string): boolean {
   } catch {
     return false;
   }
-}
-
-// ── Poseidon2 simulation (SHA-256 with domain separator) ─────────────────────
-// Production: exact Poseidon2 constants from Noir/Barretenberg
-// Testnet: SHA-256 with domain separator (structurally equivalent for testing)
-function poseidon2(inputs: Buffer[]): Buffer {
-  const h = crypto.createHash("sha256");
-  h.update(Buffer.from("POSEIDON2_BN254_"));
-  for (const inp of inputs) h.update(inp);
-  return h.digest();
 }
 
 // ── Merkle utilities ─────────────────────────────────────────────────────────
@@ -471,7 +468,6 @@ router.post("/verify", async (req, res) => {
       w1_x_nonzero: !w1.subarray(0, 32).every(b => b === 0),
       w1_y_nonzero: !w1.subarray(32, 64).every(b => b === 0),
       kzg_eval_nonzero: !kzgEval.every(b => b === 0),
-      sumcheck_lt_prime: sumcheck[0] <= 0x30,
       pi_count_valid: Array.isArray(publicInputs) && publicInputs.length >= 4,
       pi_size_valid: Array.isArray(publicInputs) && publicInputs.every((p: any) => String(p).replace("0x", "").length <= 64),
     };
@@ -493,10 +489,22 @@ router.post("/verify", async (req, res) => {
       kzg_pairing_consistent = verifyBN254Consistency(proofHex);
     } catch { /* structural check only */ }
 
-    // ── Fiat-Shamir transcript ────────────────────────────────────────────────
+    // ── Sumcheck binding check ────────────────────────────────────────────────
+    // expected = SHA256(W1_x ‖ W2_x ‖ W3_x ‖ pi0 ‖ pi1)
+    // Matches the formula used in ultrahonk_verify on-chain.
     const pi0 = publicInputs[0] ? Buffer.from(String(publicInputs[0]).replace("0x", "").padStart(64, "0"), "hex") : Buffer.alloc(32);
     const pi1 = publicInputs[1] ? Buffer.from(String(publicInputs[1]).replace("0x", "").padStart(64, "0"), "hex") : Buffer.alloc(32);
 
+    const expectedSumcheck = crypto.createHash("sha256")
+      .update(w1.subarray(0, 32))   // W1_x
+      .update(w2.subarray(0, 32))   // W2_x
+      .update(w3.subarray(0, 32))   // W3_x
+      .update(pi0)                  // pi0 (nullifier)
+      .update(pi1)                  // pi1 (tier)
+      .digest();
+    const sumcheck_binding_valid = sumcheck.equals(expectedSumcheck);
+
+    // Fiat-Shamir transcript (separate from sumcheck — used by KZG step)
     const transcript = crypto.createHash("sha256")
       .update(w1.subarray(0, 32))
       .update(pi0)
@@ -505,21 +513,17 @@ router.post("/verify", async (req, res) => {
       .update(w3.subarray(0, 32))
       .digest();
 
-    // ── Sumcheck low16 ────────────────────────────────────────────────────────
-    const sumcheckLow16 = (sumcheck[30] << 8) | sumcheck[31];
-    const sumcheck_bypass = sumcheckLow16 === 0; // bypass flag
-
     const allStructuralPassed = Object.values(structuralChecks).every(Boolean);
 
     return res.json({
-      valid: allStructuralPassed && structuralChecks.pi_count_valid,
+      valid: allStructuralPassed && structuralChecks.pi_count_valid && sumcheck_binding_valid,
       checks: {
         ...structuralChecks,
+        sumcheck_binding_valid,
         bn254_w1_on_curve: bn254_w1_valid,
         bn254_w2_on_curve: bn254_w2_valid,
         bn254_w3_on_curve: bn254_w3_valid,
         kzg_pairing_consistent,
-        sumcheck_bypass,
       },
       transcript: transcript.toString("hex"),
       proofHash: crypto.createHash("sha256").update(proofBuf).digest("hex"),
