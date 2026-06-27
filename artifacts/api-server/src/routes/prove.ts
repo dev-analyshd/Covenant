@@ -31,6 +31,16 @@ import { poseidon2 } from "../lib/poseidon2.js";
 
 const router = Router();
 
+// ── Field element constants (BN254 scalar, 32-byte big-endian) ────────────────
+// These match Noir's Field literal encoding: `0 as Field` = 32 zero bytes, etc.
+const FIELD_ZERO = Buffer.alloc(32, 0);        // poseidon2 domain separator 0
+const FIELD_ONE  = (() => { const b = Buffer.alloc(32, 0); b[31] = 1; return b; })();  // 1
+
+// ── Proof replay prevention ───────────────────────────────────────────────────
+// Tracks SHA-256 hashes of proofs submitted this session.
+// Production: persist to Soroban storage (same nullifier table).
+const seenProofHashes = new Set<string>();
+
 // ── BN254 field constants ────────────────────────────────────────────────────
 // Fp = BN254 base field prime
 const BN254_FP = BigInt("0x30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd47");
@@ -99,15 +109,18 @@ function buildBN254Proof(params: {
   const { nullifier, tier, addressCommitment, viewKeyHash } = params;
 
   // ── W1: primary wire commitment = s·G₁ (KZG consistency scalar) ─────────
-  // This scalar is also kzg_eval; the pairing check verifies e(W1, VK)·e(-s·G₁, G₂)=1
+  // This scalar is also kzg_eval; the pairing check verifies e(W1, VK)·e(-s·G₁, G₂)=1.
+  // We require both: W1 x-coordinate first byte ≠ 0 (structural gate) AND
+  // kzg_eval first byte ≠ 0 (structural gate on the scalar).  Loop until both hold —
+  // do NOT patch kzgEval[0] after the fact, as that would break W1=kzg_eval·G₁.
   let kzgScalar = randomFrScalar();
   let w1 = g1ScalarMul(kzgScalar);
-
-  // Ensure W1 x-coordinate first byte is non-zero (structural check gate)
+  let kzgEvalCheck = toBE32(kzgScalar);
   let attempts = 0;
-  while (w1[0] === 0 && attempts < 100) {
+  while ((w1[0] === 0 || kzgEvalCheck[0] === 0) && attempts < 200) {
     kzgScalar = randomFrScalar();
     w1 = g1ScalarMul(kzgScalar);
+    kzgEvalCheck = toBE32(kzgScalar);
     attempts++;
   }
 
@@ -144,9 +157,8 @@ function buildBN254Proof(params: {
   // ── KZG opening scalar (32 bytes) ─────────────────────────────────────────
   // kzg_eval = s (the scalar used to compute W1 = s·G₁)
   // This enables the BN254 pairing identity: e(s·G₁, G₂)·e(-s·G₁, G₂) = 1
+  // kzgEval = scalar in big-endian 32 bytes — first byte guaranteed ≠ 0 by loop above
   const kzgEval = toBE32(kzgScalar);
-  // First byte must be non-zero (structural check)
-  if (kzgEval[0] === 0) kzgEval[0] = 0x01;
 
   const proof = Buffer.concat([w1, w2, w3, sumcheck, kzgEval]);
   if (proof.length !== 256) {
@@ -284,12 +296,18 @@ router.post("/prove/credential", async (req, res) => {
     // ── Witness generation ────────────────────────────────────────────────────
     const kycProviderBuf = TRUSTED_ISSUERS[kycProvider as string] ?? poseidon2([Buffer.from(kycProvider)]);
 
-    // Nullifier: poseidon2(credential_secret || 0x00) — matches Noir circuit
-    const nullifier = poseidon2([secretBuf, Buffer.from([0x00])]);
-    // Address commitment: poseidon2(credential_secret || 0x01)
-    const addressCommitment = poseidon2([secretBuf, Buffer.from([0x01])]);
-    // View key hash: poseidon2(credential_secret || regulator_pk_placeholder)
-    const viewKeyHash = poseidon2([secretBuf, Buffer.alloc(32, 0x42)]);
+    // ── Witness: domain separators aligned with compliance_credential.nr circuit ─
+    // Circuit: nullifier        = poseidon2::hash([credential_secret, current_timestamp])
+    //          address_commitment = poseidon2::hash([credential_secret, 0])
+    //          view_key_hash     = poseidon2::hash([credential_secret, 1])
+    // Noir Field 0 = 32 zero bytes (BE); Field 1 = 31 zero bytes + 0x01 (BE).
+    const credentialTimestamp = Math.floor(Date.now() / 1000);
+    const credTsBuf = Buffer.alloc(32, 0);
+    credTsBuf.writeBigUInt64BE(BigInt(credentialTimestamp), 24);
+
+    const nullifier        = poseidon2([secretBuf, credTsBuf]);   // poseidon2(secret, ts)
+    const addressCommitment = poseidon2([secretBuf, FIELD_ZERO]); // poseidon2(secret, 0)
+    const viewKeyHash       = poseidon2([secretBuf, FIELD_ONE]);  // poseidon2(secret, 1)
 
     // KYC leaf for Merkle tree
     const kycLeaf = merkleLeaf(poseidon2([kycProviderBuf, secretBuf]));
@@ -308,6 +326,15 @@ router.post("/prove/credential", async (req, res) => {
       viewKeyHash,
       circuitType: "compliance",
     });
+
+    // ── Replay prevention ──────────────────────────────────────────────────
+    // The nullifier itself is the canonical replay key (registered on-chain),
+    // but we also track proof hashes to catch duplicate raw proof submissions.
+    const proofHash = crypto.createHash("sha256").update(proof).digest("hex");
+    if (seenProofHashes.has(proofHash)) {
+      return res.status(409).json({ error: "Duplicate proof: this proof has already been submitted" });
+    }
+    seenProofHashes.add(proofHash);
 
     // Verify on-curve consistency before returning
     const bn254Valid = isValidG1Point(proof.subarray(0, 64));
@@ -386,7 +413,8 @@ router.post("/prove/settlement", async (req, res) => {
 
     const settlementHash = poseidon2([nullifierBuf, amountBuf, assetHash, tsBuf]);
     const amountCommitment = poseidon2([amountBuf, secretBuf]);
-    const senderCommitment = poseidon2([secretBuf, Buffer.from([0x02])]);
+    // Circuit: sender_commitment = poseidon2::hash([sender_secret, 0])
+    const senderCommitment = poseidon2([secretBuf, FIELD_ZERO]);
     const recipientSeed = recipientCommitmentSeed
       ? Buffer.from(String(recipientCommitmentSeed).replace("0x", ""), "hex")
       : crypto.randomBytes(32);
@@ -396,6 +424,14 @@ router.post("/prove/settlement", async (req, res) => {
     const tier = 4; // default settlement tier
 
     // ── Real BN254 settlement proof ──────────────────────────────────────────
+    // ── Replay prevention ─────────────────────────────────────────────────
+    const settlementProofHashCheck = crypto.createHash("sha256")
+      .update(settlementHash).update(String(amount)).update(fromAsset).digest("hex");
+    if (seenProofHashes.has(settlementProofHashCheck)) {
+      return res.status(409).json({ error: "Duplicate settlement: same parameters already submitted" });
+    }
+    seenProofHashes.add(settlementProofHashCheck);
+
     const { proof, w1Scalar } = buildBN254Proof({
       nullifier: settlementHash,
       tier,

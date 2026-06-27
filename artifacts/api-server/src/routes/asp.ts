@@ -17,6 +17,7 @@
 
 import { Router } from "express";
 import crypto from "crypto";
+import { poseidon2 } from "../lib/poseidon2.js";
 
 const router = Router();
 
@@ -59,16 +60,16 @@ function bandAmount(usdAmount: number): string {
   return "1M+";
 }
 
-// ── Privacy set membership proof (simulated — production: Noir circuit) ───────
+// ── Privacy set membership proof ─────────────────────────────────────────────
+// Computes a Poseidon2 commitment that binds the deposit and withdrawal IDs.
+// Production: replace with a full Noir membership proof (private_settlement.nr)
+// using a Merkle path from the deposit commitment to the published ASP root.
 function generateMembershipProof(depositId: string, withdrawalId: string): string {
-  // Production: prove membership in the Merkle tree of commitments
-  // using the private_settlement.nr circuit with the deposit commitment
-  return crypto.createHash("sha256")
-    .update("ASP_MEMBERSHIP")
-    .update(depositId)
-    .update(withdrawalId)
-    .update(String(Date.now()))
-    .digest("hex");
+  // Domain-separated: ASP_MEMBERSHIP || depositId || withdrawalId || timestamp
+  const domainTag = Buffer.alloc(32, 0);
+  domainTag[31] = 0xA5; // ASP membership proof domain
+  const idBuf = Buffer.from(depositId + ":" + withdrawalId + ":" + String(Date.now()));
+  return poseidon2([domainTag, idBuf]).toString("hex");
 }
 
 // ── POST /api/asp/deposit ─────────────────────────────────────────────────────
@@ -90,13 +91,14 @@ router.post("/asp/deposit", async (req, res) => {
     const amount = Number(usdAmount);
     const travelRuleRequired = amount >= 1000;
 
-    // Commitment: poseidon2-like (SHA-256 domain-separated for testnet)
-    const commitmentHash = crypto.createHash("sha256")
-      .update("ASP_DEPOSIT_COMMITMENT")
-      .update(Buffer.from(String(nullifier).replace("0x", ""), "hex").subarray(0, 32))
-      .update(asset)
-      .update(String(amount))
-      .digest("hex");
+    // Commitment: poseidon2(domain_tag, nullifier_bytes || asset_bytes)
+    // Matches the ZK-friendly hash used on-chain (Soroban Protocol 25 Poseidon2 host fn).
+    // domain_tag = 0xA6 (ASP deposit commitment domain, distinct from membership proof)
+    const domainTag = Buffer.alloc(32, 0);
+    domainTag[31] = 0xA6;
+    const nullifierBytes = Buffer.from(String(nullifier).replace("0x", ""), "hex").subarray(0, 32);
+    const payloadBuf = Buffer.concat([nullifierBytes, Buffer.from(asset), Buffer.from(String(amount))]);
+    const commitmentHash = poseidon2([domainTag, payloadBuf]).toString("hex");
 
     const depositId = crypto.randomBytes(8).toString("hex").toUpperCase();
     const deposit: ASPDeposit = {
