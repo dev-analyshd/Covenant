@@ -172,9 +172,9 @@ export default function ASPPanel() {
   };
 
   const TABS = [
-    { id: "deposit" as const, label: "🏦 Deposit", icon: <ArrowDown size={13} /> },
-    { id: "withdraw" as const, label: "📤 Withdraw", icon: <ArrowUp size={13} /> },
-    { id: "audit" as const, label: "📋 FATF Audit", icon: <Activity size={13} /> },
+    { id: "deposit" as const, label: "Deposit to Privacy Set", icon: <ArrowDown size={13} /> },
+    { id: "withdraw" as const, label: "Prove & Withdraw", icon: <ArrowUp size={13} /> },
+    { id: "audit" as const, label: "FATF Compliance Audit", icon: <Activity size={13} /> },
   ];
 
   return (
@@ -196,13 +196,17 @@ export default function ASPPanel() {
         {/* Privacy model explainer */}
         <div className="p-4 rounded-lg flex items-start gap-3 mb-5" style={{ background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.18)" }}>
           <Info size={14} style={{ color: "#fbbf24", flexShrink: 0, marginTop: 2 }} />
-          <div className="text-xs" style={{ color: "#fde68a" }}>
-            <p className="font-semibold text-white mb-1">How ASP Privacy Works</p>
+          <div className="text-xs space-y-1.5" style={{ color: "#fde68a" }}>
+            <p className="font-semibold text-white">How ASP Privacy Works (Plain English)</p>
             <p>
-              Deposits are added to a privacy set as Poseidon2 commitments. Withdrawals prove
-              set membership via ZK proof — linking deposit to withdrawal without revealing
-              amounts or identities. FATF Travel Rule (≥$1K transfers) is satisfied via
-              encrypted VASP-to-VASP information exchange.
+              When you <strong>deposit</strong>, your funds are recorded as a cryptographic commitment
+              (not linked to your identity). When you <strong>withdraw</strong>, a ZK proof shows you
+              own a deposit in the privacy pool — without revealing <em>which</em> deposit or how much.
+            </p>
+            <p>
+              For transfers <strong>≥ $1,000</strong>, FATF's Travel Rule applies: you must exchange
+              originator/beneficiary info with the receiving VASP (Coinbase, Kraken, etc.) via an
+              encrypted token. Covenant logs the Travel Rule compliance event on-chain without exposing PII.
             </p>
           </div>
         </div>
@@ -290,12 +294,12 @@ export default function ASPPanel() {
             )}
 
             <div className="p-3 rounded-lg" style={{ background: "rgba(6,9,16,0.8)", border: "1px solid var(--color-border-subtle)" }}>
-              <div className="label-sm mb-1.5">Commitment Preview</div>
-              <div className="font-mono text-xs" style={{ color: "#6ee7b7" }}>
-                commitment = poseidon2(nullifier ‖ asset ‖ amount)
+              <div className="label-sm mb-1.5">What gets stored on-chain</div>
+              <div className="text-xs mb-1" style={{ color: "#6ee7b7" }}>
+                A <strong>Poseidon2 commitment</strong> — a one-way fingerprint of your deposit. It proves the deposit happened without revealing the amount or your identity.
               </div>
-              <div className="font-mono text-xs mt-1" style={{ color: "#475569" }}>
-                nullifier: {bestNullifier.slice(0, 18)}…
+              <div className="font-mono text-xs" style={{ color: "#475569" }}>
+                commitment = poseidon2(nullifier ‖ asset ‖ amount)
               </div>
             </div>
 

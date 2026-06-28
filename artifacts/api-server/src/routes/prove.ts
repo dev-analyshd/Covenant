@@ -28,6 +28,7 @@ import { Router } from "express";
 import crypto from "crypto";
 import { bn254 } from "@noble/curves/bn254.js";
 import { poseidon2 } from "../lib/poseidon2.js";
+import { hasProof, recordProof, hasSettlement, recordSettlement } from "../lib/replayStore.js";
 
 const router = Router();
 
@@ -37,9 +38,8 @@ const FIELD_ZERO = Buffer.alloc(32, 0);        // poseidon2 domain separator 0
 const FIELD_ONE  = (() => { const b = Buffer.alloc(32, 0); b[31] = 1; return b; })();  // 1
 
 // ── Proof replay prevention ───────────────────────────────────────────────────
-// Tracks SHA-256 hashes of proofs submitted this session.
-// Production: persist to Soroban storage (same nullifier table).
-const seenProofHashes = new Set<string>();
+// Delegated to replayStore.ts (file-backed JSON, survives restarts).
+// Production: use Soroban nullifier table in CovenantRegistry.
 
 // ── BN254 field constants ────────────────────────────────────────────────────
 // Fp = BN254 base field prime
@@ -327,14 +327,12 @@ router.post("/prove/credential", async (req, res) => {
       circuitType: "compliance",
     });
 
-    // ── Replay prevention ──────────────────────────────────────────────────
-    // The nullifier itself is the canonical replay key (registered on-chain),
-    // but we also track proof hashes to catch duplicate raw proof submissions.
+    // ── Replay prevention (persisted across restarts) ─────────────────────
     const proofHash = crypto.createHash("sha256").update(proof).digest("hex");
-    if (seenProofHashes.has(proofHash)) {
+    if (hasProof(proofHash)) {
       return res.status(409).json({ error: "Duplicate proof: this proof has already been submitted" });
     }
-    seenProofHashes.add(proofHash);
+    recordProof(proofHash);
 
     // Verify on-curve consistency before returning
     const bn254Valid = isValidG1Point(proof.subarray(0, 64));
@@ -418,19 +416,21 @@ router.post("/prove/settlement", async (req, res) => {
     const recipientSeed = recipientCommitmentSeed
       ? Buffer.from(String(recipientCommitmentSeed).replace("0x", ""), "hex")
       : crypto.randomBytes(32);
-    const recipientCommitment = poseidon2([recipientSeed, Buffer.from([0x03])]);
-    const viewKeyHash = poseidon2([secretBuf, Buffer.from([0x04])]);
+    // Recipient commitment: poseidon2(recipient_seed, 1) — domain tag = FIELD_ONE
+    const recipientCommitment = poseidon2([recipientSeed, FIELD_ONE]);
+    // viewKeyHash consistent with compliance credential: poseidon2(secret, 1)
+    const viewKeyHash = poseidon2([secretBuf, FIELD_ONE]);
 
     const tier = 4; // default settlement tier
 
     // ── Real BN254 settlement proof ──────────────────────────────────────────
-    // ── Replay prevention ─────────────────────────────────────────────────
-    const settlementProofHashCheck = crypto.createHash("sha256")
+    // ── Replay prevention (persisted across restarts) ─────────────────────
+    const settlementKey = crypto.createHash("sha256")
       .update(settlementHash).update(String(amount)).update(fromAsset).digest("hex");
-    if (seenProofHashes.has(settlementProofHashCheck)) {
+    if (hasSettlement(settlementKey)) {
       return res.status(409).json({ error: "Duplicate settlement: same parameters already submitted" });
     }
-    seenProofHashes.add(settlementProofHashCheck);
+    recordSettlement(settlementKey);
 
     const { proof, w1Scalar } = buildBN254Proof({
       nullifier: settlementHash,

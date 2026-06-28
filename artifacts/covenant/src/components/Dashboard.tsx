@@ -1,7 +1,7 @@
 import {
   Shield, Lock, Eye, Zap, Globe, Activity, FileCheck,
   ExternalLink, CheckCircle2, AlertTriangle,
-  TrendingUp, Server, Cpu, DollarSign
+  TrendingUp, Server, Cpu, DollarSign, ArrowRight
 } from "lucide-react";
 import { useCovenantStore } from "../lib/store";
 import {
@@ -87,6 +87,37 @@ const TIER_DATA = [
   { tier: 3, label: "Silver",   score: "26–50", limit: "$600,000",  color: "#fbbf24" },
   { tier: 2, label: "Bronze",   score: "51–75", limit: "$400,000",  color: "#fb923c" },
   { tier: 1, label: "Basic",    score: "76–100", limit: "$200,000", color: "#f87171" },
+];
+
+const GETTING_STARTED = [
+  {
+    step: "1",
+    title: "Generate a Compliance Credential",
+    plain: "Pick your KYC provider, enter your risk score, and Covenant will generate a 256-byte zero-knowledge proof that you're compliant — without revealing any personal data.",
+    tab: "Credential",
+    color: "#3b82f6",
+  },
+  {
+    step: "2",
+    title: "Execute a Private Settlement",
+    plain: "Enter an amount, a recipient Stellar address, and pick a stablecoin. The ZK proof gates the transfer — the amount and counterparties are never visible on-chain.",
+    tab: "Settlement",
+    color: "#8b5cf6",
+  },
+  {
+    step: "3",
+    title: "Privacy Set (Optional)",
+    plain: "Pool funds anonymously using the ASP. Deposits become Poseidon2 commitments; withdrawals prove membership without linking to the deposit.",
+    tab: "ASP",
+    color: "#f59e0b",
+  },
+  {
+    step: "4",
+    title: "Regulator Audit",
+    plain: "Regulators can inspect a settlement using a view key. Compliance details are revealed only to the keyholder — access is logged on-chain.",
+    tab: "Regulator",
+    color: "#10b981",
+  },
 ];
 
 export default function Dashboard() {
@@ -199,6 +230,34 @@ export default function Dashboard() {
               </div>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* ── Getting Started Guide ──────────────────────────────────────── */}
+      <div className="glass p-5 sm:p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <Zap size={15} style={{ color: "#fbbf24" }} />
+          <h3 className="text-sm font-semibold text-white">Getting Started — 4 Steps</h3>
+          <span className="text-xs px-2 py-0.5 rounded-full ml-auto" style={{ background: "rgba(251,191,36,0.1)", color: "#fbbf24", border: "1px solid rgba(251,191,36,0.2)" }}>
+            Plain English
+          </span>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          {GETTING_STARTED.map((g) => (
+            <div key={g.step} className="rounded-xl p-4" style={{ background: `${g.color}08`, border: `1px solid ${g.color}20` }}>
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
+                  style={{ background: `${g.color}20`, color: g.color, border: `1px solid ${g.color}40` }}>
+                  {g.step}
+                </div>
+                <span className="text-xs font-semibold text-white">{g.title}</span>
+              </div>
+              <p className="text-xs leading-relaxed" style={{ color: "var(--color-text-dim)" }}>{g.plain}</p>
+              <div className="flex items-center gap-1 mt-2 text-xs font-medium" style={{ color: g.color }}>
+                <ArrowRight size={11} /> Go to {g.tab}
+              </div>
+            </div>
+          ))}
         </div>
       </div>
 

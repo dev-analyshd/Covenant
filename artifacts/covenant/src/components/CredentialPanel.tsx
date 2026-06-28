@@ -312,17 +312,28 @@ export default function CredentialPanel() {
         {/* Form */}
         {step === "form" && (
           <div className="space-y-5 animate-in">
-            {/* Proving API info banner */}
-            <div className="p-3 rounded-lg flex items-start gap-2" style={{ background: "rgba(59,130,246,0.06)", border: "1px solid rgba(59,130,246,0.15)" }}>
-              <Cpu size={13} style={{ color: "#60a5fa", marginTop: 2, flexShrink: 0 }} />
-              <div className="text-xs" style={{ color: "#93c5fd" }}>
-                <strong>Proving API active</strong> — witness generated server-side, proof verified off-chain before on-chain submission.
-                Credential secret stored locally via <strong>IndexedDB AES-256-GCM</strong>.
+            {/* Plain English explainer */}
+            <div className="p-4 rounded-lg space-y-2" style={{ background: "rgba(59,130,246,0.06)", border: "1px solid rgba(59,130,246,0.15)" }}>
+              <div className="text-xs font-semibold" style={{ color: "#93c5fd" }}>What is a Compliance Credential?</div>
+              <p className="text-xs leading-relaxed" style={{ color: "#bfdbfe" }}>
+                A <strong>256-byte ZK proof</strong> that says "this person passed KYC and has a risk score below a threshold" —
+                without revealing <em>who</em> they are or what their actual score is. The proof is registered on Stellar so
+                any smart contract can verify your compliance status instantly, privately, on-chain.
+              </p>
+              <div className="flex flex-wrap gap-3 pt-1">
+                {[
+                  { icon: "🔒", text: "Secret never leaves your device" },
+                  { icon: "✅", text: "On-chain in ~5 seconds" },
+                  { icon: "📋", text: "Valid for 90 days" },
+                ].map(i => (
+                  <span key={i.text} className="text-xs" style={{ color: "#7dd3fc" }}>{i.icon} {i.text}</span>
+                ))}
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--color-text-muted)" }}>KYC Provider *</label>
+              <label className="block text-xs font-medium mb-0.5" style={{ color: "var(--color-text-muted)" }}>KYC Provider *</label>
+              <p className="text-xs mb-1.5" style={{ color: "var(--color-text-dim)" }}>Who verified your identity? (Onfido, Jumio, etc.)</p>
               <select className="input-field" value={form.kycProvider} onChange={(e) => setForm({ ...form, kycProvider: e.target.value })}>
                 <option value="">Select provider…</option>
                 {KYC_PROVIDERS.map((p) => <option key={p}>{p}</option>)}
@@ -353,7 +364,8 @@ export default function CredentialPanel() {
             </div>
 
             <div>
-              <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--color-text-muted)" }}>Source of Funds *</label>
+              <label className="block text-xs font-medium mb-0.5" style={{ color: "var(--color-text-muted)" }}>Source of Funds *</label>
+              <p className="text-xs mb-1.5" style={{ color: "var(--color-text-dim)" }}>Where does the money come from? (proven in ZK — not revealed on-chain)</p>
               <select className="input-field" value={form.sourceOfFunds} onChange={(e) => setForm({ ...form, sourceOfFunds: e.target.value })}>
                 <option value="">Select source…</option>
                 {SOF_OPTIONS.map((o) => <option key={o}>{o}</option>)}
@@ -384,6 +396,12 @@ export default function CredentialPanel() {
               </div>
             </div>
 
+            {valid && (
+              <div className="p-3 rounded-lg text-xs" style={{ background: "rgba(16,185,129,0.06)", border: "1px solid rgba(16,185,129,0.15)" }}>
+                <span className="font-semibold" style={{ color: "#34d399" }}>What happens when you click:</span>
+                <span style={{ color: "#6ee7b7" }}> A ZK proof is generated, verified off-chain, then your nullifier is registered on Stellar's CovenantRegistry contract. Takes ~5 seconds.</span>
+              </div>
+            )}
             <button
               onClick={handleGenerate}
               disabled={!valid}

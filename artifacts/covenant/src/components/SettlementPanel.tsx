@@ -246,11 +246,21 @@ export default function SettlementPanel() {
               </div>
             )}
 
-            <div className="p-3 rounded-lg flex items-start gap-2" style={{ background: "rgba(139,92,246,0.06)", border: "1px solid rgba(139,92,246,0.15)" }}>
-              <Cpu size={13} style={{ color: "#a78bfa", marginTop: 2, flexShrink: 0 }} />
-              <div className="text-xs" style={{ color: "#c4b5fd" }}>
-                <strong>Proving API active</strong> — settlement witness generated server-side, proof verified off-chain before submitting.
-                A real <strong>0.001 XLM</strong> Stellar payment carries the settlement hash as memo.
+            <div className="p-4 rounded-lg space-y-2" style={{ background: "rgba(139,92,246,0.06)", border: "1px solid rgba(139,92,246,0.15)" }}>
+              <div className="text-xs font-semibold" style={{ color: "#c4b5fd" }}>What is a Private Settlement?</div>
+              <p className="text-xs leading-relaxed" style={{ color: "#ddd6fe" }}>
+                A stablecoin transfer where the <strong>amount, sender, and recipient are proven inside a ZK circuit</strong> —
+                only a settlement hash appears on-chain. The Soroban contract verifies the proof before releasing funds.
+                Your compliance credential authorizes the transfer without revealing your identity.
+              </p>
+              <div className="flex flex-wrap gap-3 pt-1">
+                {[
+                  { icon: "🔐", text: "Amount private" },
+                  { icon: "🌐", text: "Real Stellar payment" },
+                  { icon: "✅", text: "ZK-gated by contract" },
+                ].map(i => (
+                  <span key={i.text} className="text-xs" style={{ color: "#a78bfa" }}>{i.icon} {i.text}</span>
+                ))}
               </div>
             </div>
 
@@ -300,7 +310,7 @@ export default function SettlementPanel() {
                 Settlement Amount *
               </label>
               <p className="text-xs mb-2" style={{ color: "var(--color-text-dim)" }}>
-                Proven in ZK · Max: ${tierLimit.toLocaleString()} (Tier {bestTier || "?"})
+                Amount stays private (proven inside ZK circuit, never on-chain) · Your limit: ${tierLimit.toLocaleString()} based on your compliance tier
               </p>
               <input
                 type="number" min="0" step="1000" className="input-field"
@@ -317,10 +327,10 @@ export default function SettlementPanel() {
 
             <div>
               <label className="block text-xs font-medium mb-1" style={{ color: "var(--color-text-muted)" }}>
-                Recipient Address *
+                Recipient Stellar Address *
               </label>
               <p className="text-xs mb-2" style={{ color: "var(--color-text-dim)" }}>
-                Stellar public key · Proven in ZK circuit (not exposed on-chain)
+                Starts with "G" · 56 characters · Recipient's identity proven in ZK — not exposed on the blockchain
               </p>
               <input
                 className="input-field font-mono text-xs"
@@ -348,6 +358,12 @@ export default function SettlementPanel() {
               </div>
             </div>
 
+            {valid && (
+              <div className="p-3 rounded-lg text-xs" style={{ background: "rgba(139,92,246,0.07)", border: "1px solid rgba(139,92,246,0.2)" }}>
+                <span className="font-semibold" style={{ color: "#c4b5fd" }}>What will happen:</span>
+                <span style={{ color: "#ddd6fe" }}> ZK proof generated → verified off-chain → CovenantSettlement contract called on Soroban → real 0.001 XLM payment sent to recipient with settlement hash in memo.</span>
+              </div>
+            )}
             <button
               onClick={handleSettle}
               disabled={!valid}

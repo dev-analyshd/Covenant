@@ -179,6 +179,48 @@ export default function ZKExplorer() {
 
   return (
     <div className="max-w-4xl mx-auto animate-in space-y-4">
+      {/* Plain English intro */}
+      <div className="glass p-5">
+        <div className="flex items-center gap-2 mb-3">
+          <BookOpen size={15} style={{ color: "#60a5fa" }} />
+          <h3 className="text-sm font-semibold text-white">ZK in Plain English</h3>
+        </div>
+        <p className="text-sm leading-relaxed mb-3" style={{ color: "var(--color-text-muted)" }}>
+          A <strong className="text-white">zero-knowledge proof</strong> lets you prove a statement is true without revealing the underlying data.
+          In Covenant: "this person is KYC'd with a risk score below X" — proven on-chain, identity stays private.
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {[
+            { title: "Noir", body: "The language for writing ZK circuits. Every operation is mathematically constrained — making cheating computationally impossible.", color: "#60a5fa" },
+            { title: "UltraHonk", body: "The proving algorithm that produces a 256-byte proof from a Noir circuit. Faster and smaller than older systems like Groth16.", color: "#a78bfa" },
+            { title: "BN254 Curve", body: "The elliptic curve the math runs on — same as Ethereum's precompiles. Stellar Protocol 26 added native BN254 host functions.", color: "#34d399" },
+          ].map(c => (
+            <div key={c.title} className="p-3 rounded-lg" style={{ background: `${c.color}08`, border: `1px solid ${c.color}20` }}>
+              <div className="text-xs font-semibold mb-1" style={{ color: c.color }}>{c.title}</div>
+              <p className="text-xs leading-relaxed" style={{ color: "var(--color-text-dim)" }}>{c.body}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Testnet SRS caveat */}
+      <div className="glass p-5" style={{ border: "1px solid rgba(251,191,36,0.25)" }}>
+        <div className="flex items-start gap-3">
+          <Zap size={16} style={{ color: "#fbbf24", flexShrink: 0, marginTop: 2 }} />
+          <div>
+            <div className="text-xs font-semibold mb-1" style={{ color: "#fbbf24" }}>Testnet Note — τ=1 SRS Simplification</div>
+            <p className="text-xs leading-relaxed mb-2" style={{ color: "#fde68a" }}>
+              On testnet, the verification key uses τ=1, meaning <strong>VK_G₂ = G₂</strong> (the BN254 generator).
+              Any scalar s satisfies the pairing check. Real soundness needs a <strong>trusted setup ceremony</strong>
+              (multi-party computation where τ is destroyed) so no one knows the secret.
+            </p>
+            <p className="text-xs font-medium" style={{ color: "#fbbf24" }}>
+              Production path: run a Powers-of-Tau ceremony → publish SRS → redeploy UltraHonkVerifier. No other code changes required.
+            </p>
+          </div>
+        </div>
+      </div>
+
       <div className="glass glow-primary p-6">
         <div className="flex items-start gap-4">
           <div

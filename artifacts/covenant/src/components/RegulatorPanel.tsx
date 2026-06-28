@@ -180,6 +180,18 @@ export default function RegulatorPanel() {
   return (
     <div className="max-w-3xl mx-auto animate-in space-y-6">
       <div className="glass p-6 sm:p-8">
+        {/* Plain English explainer for regulators */}
+        <div className="mb-5 p-4 rounded-lg space-y-2" style={{ background: "rgba(16,185,129,0.06)", border: "1px solid rgba(16,185,129,0.15)" }}>
+          <div className="text-xs font-semibold" style={{ color: "#34d399" }}>What you can do as a Regulator</div>
+          <p className="text-xs leading-relaxed" style={{ color: "#6ee7b7" }}>
+            Each settlement records a <strong>view key hash</strong> on-chain. As a regulator, you hold the matching
+            view key — enter it below to decrypt the compliance trail for any settlement: who transacted, what tier
+            they were, their KYC provider, and risk score. Access is <strong>logged on-chain</strong> for accountability.
+          </p>
+          <p className="text-xs" style={{ color: "#34d399" }}>
+            🔑 View key = poseidon2(credential_secret ‖ regulator_pk) — only you can derive it. Privacy is preserved for everyone else.
+          </p>
+        </div>
         <div className="flex items-start gap-4 mb-5">
           <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: "rgba(16,185,129,0.1)" }}>
             <Eye style={{ color: "#34d399" }} size={22} />
