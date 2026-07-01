@@ -30,6 +30,23 @@ interface SettlementEntry {
   viewKeyHash?: string;
 }
 
+// ── XML escaping — prevents XML injection via user-controlled fields ────────
+// Any settlement field (asset, amount, kycProvider, etc.) can originate from
+// client input; without escaping, values like `]]>`, `<`, `&` can break the
+// document structure or inject spoofed elements into a regulator-facing report.
+function escapeXml(value: unknown): string {
+  return String(value ?? "").replace(/[<>&'"]/g, (ch) => {
+    switch (ch) {
+      case "<": return "&lt;";
+      case ">": return "&gt;";
+      case "&": return "&amp;";
+      case "'": return "&apos;";
+      case '"': return "&quot;";
+      default: return ch;
+    }
+  });
+}
+
 // ── SAR XML helper ────────────────────────────────────────────────────────────
 function buildSARXml(
   settlements: SettlementEntry[],
@@ -38,14 +55,14 @@ function buildSARXml(
   const txs = settlements
     .map(
       (s) => `    <Transaction>
-      <TransactionID>${s.settlementId}</TransactionID>
-      <AssetType>${s.asset}</AssetType>
-      <AmountBand>${s.amount}</AmountBand>
-      <ComplianceTier>${s.complianceTier}</ComplianceTier>
-      <KYCProvider>${s.kycProvider ?? "Verified"}</KYCProvider>
-      <SanctionsStatus>${s.sanctionsStatus ?? "Cleared"}</SanctionsStatus>
-      <RiskScore>${s.riskScore ?? "N/A"}</RiskScore>
-      <Timestamp>${s.timestamp}</Timestamp>
+      <TransactionID>${escapeXml(s.settlementId)}</TransactionID>
+      <AssetType>${escapeXml(s.asset)}</AssetType>
+      <AmountBand>${escapeXml(s.amount)}</AmountBand>
+      <ComplianceTier>${escapeXml(s.complianceTier)}</ComplianceTier>
+      <KYCProvider>${escapeXml(s.kycProvider ?? "Verified")}</KYCProvider>
+      <SanctionsStatus>${escapeXml(s.sanctionsStatus ?? "Cleared")}</SanctionsStatus>
+      <RiskScore>${escapeXml(s.riskScore ?? "N/A")}</RiskScore>
+      <Timestamp>${escapeXml(s.timestamp)}</Timestamp>
       <SuspiciousActivity>None — ZK-attested compliance</SuspiciousActivity>
       <PrivacyNote>Sender identity protected by ZK proof. Provide view key to decrypt.</PrivacyNote>
     </Transaction>`
@@ -57,10 +74,10 @@ function buildSARXml(
   xsi:schemaLocation="https://covenant.zk/schema/sar/v1.0">
   <FilingMetadata>
     <ReportType>Suspicious Activity Report (SAR)</ReportType>
-    <FilingDate>${filingInfo.filingDate}</FilingDate>
+    <FilingDate>${escapeXml(filingInfo.filingDate)}</FilingDate>
     <FilingInstitution>Covenant ZK Compliance System v1.0</FilingInstitution>
-    <RegulatorID>${filingInfo.regulatorId}</RegulatorID>
-    <Jurisdiction>${filingInfo.jurisdiction}</Jurisdiction>
+    <RegulatorID>${escapeXml(filingInfo.regulatorId)}</RegulatorID>
+    <Jurisdiction>${escapeXml(filingInfo.jurisdiction)}</Jurisdiction>
     <ProofSystem>UltraHonk BN254 (Noir 1.0-beta.9)</ProofSystem>
     <OnChainVerification>Stellar Soroban — CovenantSettlement contract</OnChainVerification>
   </FilingMetadata>

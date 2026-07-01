@@ -9,7 +9,7 @@ const CONTRACTS = [
   {
     name: "UltraHonkVerifier",
     address: "CC66…R257",
-    fullAddress: "CC66GX7NOKUVE7GBU56E5Z3BEOFEPNJ7VEN7DSB5ZS3NDCHDAFGUR257",
+    fullAddress: "CAURSBIA5JVEZTRDN2OATBLMQUUTNEDFKJUDHUB5KBDKF3JCGCT67VYW",
     color: "#3b82f6",
     desc: "Verifies Noir UltraHonk proofs using Protocol 26 BN254 host functions",
     functions: [
@@ -21,7 +21,7 @@ const CONTRACTS = [
   {
     name: "CovenantRegistry",
     address: "CBHH…4H2S",
-    fullAddress: "CBHH4GISNRX2NWE7OQA4CK26JPRTLI5QXSZVBE7MQJGLI5SYWUOY4H2S",
+    fullAddress: "CDGVCDVWUZSCO4AIE34RVOEV7GUMZYGS7WN7PIJMZF5GN3K7WI3NZ7NJ",
     color: "#8b5cf6",
     desc: "Credential lifecycle management — nullifier tracking, tier storage, revocation",
     functions: [
@@ -35,7 +35,7 @@ const CONTRACTS = [
   {
     name: "CovenantSettlement",
     address: "CCBD…5ODA",
-    fullAddress: "CCBD23TQUGAD7YPVZCDVM6UKYVKXQYGPR3JWKVNFKRUWM2GNQEAG5ODA",
+    fullAddress: "CC2CNABDTKZ7ZJGZHP24IE43GNW7PUZPOUZJ6SNGMSLQVWEGQO62EKKI",
     color: "#10b981",
     desc: "ZK-gated SAC transfers with encrypted compliance trail and regulator audit portal",
     functions: [
@@ -48,7 +48,7 @@ const CONTRACTS = [
   {
     name: "CovenantComplianceBridge",
     address: "CDXX…RLBE",
-    fullAddress: "CDXXIBLVGZWJ7BCPXC423RPWTVSE43KHIVYBMPVMPPOJFZFDI7VZRLBE",
+    fullAddress: "CCHOTPRBSC52QENAQ7KTZN6BMYZG4JD3JOZ7GXPUVIA5X2LVF6QT3JP2",
     color: "#f59e0b",
     desc: "Cross-currency settlement via Stellar DEX path payment with compliance enforcement",
     functions: [
