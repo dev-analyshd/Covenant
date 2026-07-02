@@ -8,6 +8,8 @@ import Settlements from "./pages/Settlements";
 import Bridge from "./pages/Bridge";
 import Audit from "./pages/Audit";
 import Settings from "./pages/Settings";
+import ZKExplorer from "./pages/ZKExplorer";
+import Support from "./pages/Support";
 
 export default function App() {
   return (
@@ -20,7 +22,9 @@ export default function App() {
           <Route path="/settlements" component={Settlements} />
           <Route path="/bridge" component={Bridge} />
           <Route path="/audit" component={Audit} />
+          <Route path="/explorer" component={ZKExplorer} />
           <Route path="/settings" component={Settings} />
+          <Route path="/support" component={Support} />
           <Route component={Dashboard} />
         </Switch>
       </Layout>

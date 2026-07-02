@@ -20,6 +20,10 @@ author = "agent"
 task = "workflow.run"
 args = "Start application"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "API Server"
+
 [[workflows.workflow]]
 name = "Start application"
 author = "agent"
@@ -31,6 +35,18 @@ waitForPort = 5000
 
 [workflows.workflow.metadata]
 outputType = "webview"
+
+[[workflows.workflow]]
+name = "API Server"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd /home/runner/workspace/artifacts/api-server && PORT=3000 pnpm run start"
+waitForPort = 3000
+
+[workflows.workflow.metadata]
+outputType = "console"
 
 [agent]
 stack = "BEST_EFFORT_FALLBACK"
@@ -48,10 +64,6 @@ API_PORT = "8080"
 [[ports]]
 localPort = 3000
 externalPort = 3000
-
-[[ports]]
-localPort = 5000
-externalPort = 80
 
 [[ports]]
 localPort = 8081

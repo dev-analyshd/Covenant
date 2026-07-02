@@ -3,7 +3,7 @@ import { Eye, EyeOff } from "lucide-react";
 
 type Size = "sm" | "md" | "lg";
 
-interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
+interface InputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, "size"> {
   label?: string;
   helper?: string;
   error?: string;
