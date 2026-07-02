@@ -75,6 +75,7 @@
     "zod": "catalog:"
   },
   "dependencies": {
+    "@creit.tech/stellar-wallets-kit": "^2.5.0",
     "@stellar/stellar-sdk": "^16.0.1",
     "zustand": "^5.0.14"
   }
