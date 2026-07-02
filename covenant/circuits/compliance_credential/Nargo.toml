@@ -1,7 +1,0 @@
-[package]
-name = "compliance_credential"
-type = "bin"
-authors = ["Covenant Team"]
-compiler_version = ">=1.0.0-beta.9"
-
-[dependencies]

@@ -1,49 +1,64 @@
-# See https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files for more about ignoring files.
+# Dependencies
+node_modules/
+target/
 
-# compiled output
-dist
-tmp
-out-tsc
+# Build outputs
+dist/
+build/
+tmp/
+out-tsc/
+.output/
+
+# TypeScript
 *.tsbuildinfo
-.expo
-.expo-shared
 
-# dependencies
-node_modules
+# Noir artifacts
+circuits/**/target/
+circuits/**/proof.bin
+circuits/**/vk.bin
+circuits/**/witness.gz
+circuits/**/*.toml.lock
 
-# IDEs and editors
-/.idea
-.project
-.classpath
-.c9/
-*.launch
-.settings/
-*.sublime-workspace
+# Soroban deployment artifacts
+*.wasm
+*_optimized.wasm
+contract-ids.json
 
-# IDE - VSCode
-.vscode/*
-!.vscode/settings.json
-!.vscode/tasks.json
-!.vscode/launch.json
-!.vscode/extensions.json
+# Environment
+.env
+.env.local
+.env.*.local
 
-# misc
-/.sass-cache
-/connect.lock
-/coverage
-/libpeerconnection.log
+# Logs
+*.log
+logs/
 npm-debug.log
 yarn-error.log
-testem.log
-/typings
+
+# Lockfiles (keep Cargo.lock and pnpm-lock.yaml for reproducibility)
+yarn.lock
+package-lock.json
+
+# Test artifacts
+/test/output/
 
 # System Files
 .DS_Store
 Thumbs.db
 
-.cursor/rules/nx-rules.mdc
-.github/instructions/nx.instructions.md
+# IDEs
+/.idea
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.sublime-workspace
+*.swp
+*.swo
 
 # Replit
+.replit
+replit.nix
 .cache/
 .local/

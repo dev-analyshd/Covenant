@@ -8,8 +8,8 @@
 // Run from repo root:  node scripts/deploy-contracts.mjs
 //
 // Outputs: writes new contract IDs to:
-//   - artifacts/covenant/public/contract-ids.json
-//   - artifacts/covenant/src/lib/contracts.ts  (CONTRACTS constant)
+//   - public/contract-ids.json
+//   - src/lib/contracts.ts  (CONTRACTS constant)
 // ============================================================================
 
 import {
@@ -37,7 +37,7 @@ const NETWORK = Networks.TESTNET;
 const soroban = new StellarRpc.Server(RPC_URL);
 
 // ── WASM paths ───────────────────────────────────────────────────────────────
-const WASM_DIR = join(ROOT, "artifacts/covenant/wasm");
+const WASM_DIR = join(ROOT, "wasm");
 const WASMS = {
   ultrahonk_verifier:        join(WASM_DIR, "ultrahonk_verifier.wasm"),
   covenant_registry:         join(WASM_DIR, "covenant_registry.wasm"),
@@ -256,7 +256,7 @@ async function main() {
   };
 
   // Update public/contract-ids.json
-  const contractIdsPath = join(ROOT, "artifacts/covenant/public/contract-ids.json");
+  const contractIdsPath = join(ROOT, "public/contract-ids.json");
   const contractIdsJson = {
     network: "testnet",
     deployed_at: new Date().toISOString(),
@@ -266,7 +266,7 @@ async function main() {
   log("write", `contract-ids.json updated`);
 
   // Update contracts.ts CONTRACTS constant
-  const contractsTsPath = join(ROOT, "artifacts/covenant/src/lib/contracts.ts");
+  const contractsTsPath = join(ROOT, "src/lib/contracts.ts");
   let contractsTs = readFileSync(contractsTsPath, "utf8");
   contractsTs = contractsTs.replace(
     /export const CONTRACTS = \{[^}]+\} as const;/s,
