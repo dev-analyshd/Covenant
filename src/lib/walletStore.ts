@@ -1,20 +1,17 @@
 import { create } from "zustand";
-import {
-  StellarWalletsKit,
-  Networks,
-  FreighterModule,
-  AlbedoModule,
-  xBullModule,
-  RabetModule,
-  LobstrModule,
-  HanaModule,
-  HotWalletModule,
-  KleverModule,
-  BitgetModule,
-  CactusLinkModule,
-  OneKeyModule,
-  LedgerModule,
-} from "@creit.tech/stellar-wallets-kit";
+import { StellarWalletsKit, Networks } from "@creit.tech/stellar-wallets-kit";
+import { FreighterModule } from "@creit.tech/stellar-wallets-kit/modules/freighter";
+import { AlbedoModule } from "@creit.tech/stellar-wallets-kit/modules/albedo";
+import { xBullModule } from "@creit.tech/stellar-wallets-kit/modules/xbull";
+import { RabetModule } from "@creit.tech/stellar-wallets-kit/modules/rabet";
+import { LobstrModule } from "@creit.tech/stellar-wallets-kit/modules/lobstr";
+import { HanaModule } from "@creit.tech/stellar-wallets-kit/modules/hana";
+import { HotWalletModule } from "@creit.tech/stellar-wallets-kit/modules/hotwallet";
+import { KleverModule } from "@creit.tech/stellar-wallets-kit/modules/klever";
+import { BitgetModule } from "@creit.tech/stellar-wallets-kit/modules/bitget";
+import { CactusLinkModule } from "@creit.tech/stellar-wallets-kit/modules/cactuslink";
+import { OneKeyModule } from "@creit.tech/stellar-wallets-kit/modules/onekey";
+import { LedgerModule } from "@creit.tech/stellar-wallets-kit/modules/ledger";
 import { COVENANT_PUBLIC } from "./stellar";
 
 let inited = false;
@@ -97,4 +94,4 @@ export function activeAddress(): string {
   return useWalletStore.getState().address ?? COVENANT_PUBLIC;
 }
 
-export const SUPPORTED_WALLET_COUNT = 10;
+export const SUPPORTED_WALLET_COUNT = 12;
