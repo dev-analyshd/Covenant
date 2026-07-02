@@ -1,0 +1,104 @@
+cd /path/to/Covenant
+
+# 1. BACKUP
+git add -A && git commit -m "chore: backup before restructure"
+git branch backup-before-restructure && git push origin backup-before-restructure
+
+# 2. MOVE ALL FILES TO ROOT
+cd artifacts/covenant
+for f in README.md SUBMISSION.md DEMO_SCRIPT.md Cargo.toml package.json justfile tsconfig.json vite.config.ts index.html; do
+  git mv "$f" "../../$f" 2>/dev/null || true
+done
+for d in src contracts circuits scripts docs; do
+  git mv "$d" "../../$d" 2>/dev/null || true
+done
+cd ../..
+
+# 3. MERGE .gitignore
+cat artifacts/covenant/.gitignore >> .gitignore 2>/dev/null
+sort -u .gitignore -o .gitignore
+git rm artifacts/covenant/.gitignore 2>/dev/null || true
+
+# 4. FIX PATH REFERENCES
+sed -i 's|artifacts/covenant/||g' Cargo.toml package.json justfile scripts/deploy.sh 2>/dev/null || true
+
+# 5. CREATE NEW STANDARD FILES
+cat > CONTRIBUTING.md << 'EOF'
+# Contributing to Covenant
+
+1. Fork and clone
+2. Branch: `git checkout -b feature/name`
+3. Commit: `git commit -m "feat: description"`
+4. Push and open PR
+
+## Code Style
+- TypeScript: Strict mode
+- Rust: `cargo fmt` + `cargo clippy`
+- Noir: `nargo fmt`
+EOF
+
+cat > LICENSE << 'EOF'
+MIT License
+
+Copyright (c) 2026 Covenant Contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+EOF
+
+mkdir -p .github/workflows
+cat > .github/workflows/ci.yml << 'EOF'
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+jobs:
+  test-contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: wasm32-unknown-unknown
+      - run: cargo test
+  test-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - run: npm run build
+EOF
+
+# 6. CLEAN UP
+cat > artifacts/README.md << 'EOF'
+# Files Moved to Root
+
+All project files moved from `artifacts/covenant/` to repository root.
+
+See [README.md](../README.md) for documentation.
+EOF
+git rm -r artifacts/covenant/ 2>/dev/null || rm -rf artifacts/covenant/
+
+# 7. COMMIT AND PUSH
+git add -A
+git commit -m "refactor: move project files from artifacts/covenant to root"
+git push origin main
+
+echo "Done! Verify at https://github.com/dev-analyshd/Covenant"

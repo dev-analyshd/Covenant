@@ -641,8 +641,18 @@ router.put("/issuer-root", async (req, res) => {
     if (!newRoot || !label) {
       return res.status(400).json({ error: "newRoot and label required" });
     }
-    if (!adminKey) {
-      return res.status(403).json({ error: "adminKey required for issuer root update" });
+    const expectedAdminKey = process.env.ADMIN_KEY;
+    if (!expectedAdminKey) {
+      return res.status(503).json({
+        error: "issuer root updates disabled: ADMIN_KEY not configured on server",
+      });
+    }
+    if (
+      typeof adminKey !== "string" ||
+      adminKey.length !== expectedAdminKey.length ||
+      !crypto.timingSafeEqual(Buffer.from(adminKey), Buffer.from(expectedAdminKey))
+    ) {
+      return res.status(403).json({ error: "invalid adminKey" });
     }
 
     const rootBytes = Buffer.from(String(newRoot).replace("0x", ""), "hex");
